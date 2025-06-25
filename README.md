@@ -1,6 +1,12 @@
 # Arc Runtime
 
-Arc Runtime is the client-side component of the Arc AI reliability system, designed to intercept and fix common failure patterns with minimal overhead. This SDK is a lightweight Python interceptor that prevents AI agent failures in real-time by applying learned fixes before requests reach the LLM and designed to be used with Arc-Core. 
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/arc-runtime.svg)](https://badge.fury.io/py/arc-runtime)
+[![Performance](https://img.shields.io/badge/P99%20Latency-0.011ms-brightgreen.svg)](docs/performance_report.md)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blueviolet.svg)](https://opentelemetry.io/)
+
+Arc Runtime is a lightweight Python interceptor that prevents AI agent failures in real-time by applying learned fixes before requests reach the LLM. It's the client-side component of the Arc AI reliability system, designed to work with Arc Core. 
 
 ## Key Features
 
@@ -20,6 +26,41 @@ Arc Runtime intercepts outgoing LLM API calls and:
 3. Streams telemetry to Arc Core for continuous learning
 4. Exposes metrics for monitoring
 
+## System Architecture
+
+Arc Runtime is the client-side component that sits in your application environment:
+
+```mermaid
+graph LR
+    subgraph "Your Application Environment"
+        App[Your AI Application]
+        Arc[Arc Runtime<br/>0.011ms overhead]
+        LLM[OpenAI/Anthropic SDK]
+        
+        App --> Arc
+        Arc --> LLM
+    end
+    
+    subgraph "Arc Core (Separate Service)"
+        Collector[gRPC Collector]
+        Detector[Failure Detector]
+        Registry[Pattern Registry]
+        
+        Arc -.->|Telemetry Stream| Collector
+        Registry -.->|Pattern Updates| Arc
+    end
+    
+    LLM --> API[LLM API]
+    
+    style Arc fill:#4CAF50,stroke:#2E7D32,stroke-width:2px
+    style App fill:#2196F3,stroke:#1565C0,stroke-width:2px
+```
+
+**Key Integration Points:**
+- **Telemetry Streaming**: Arc Runtime streams all request/response data to Arc Core via gRPC
+- **Pattern Updates**: Arc Core pushes new failure patterns and fixes to Runtime instances
+- **Metrics Export**: Local Prometheus endpoint for monitoring Arc Runtime performance
+
 ## Installation
 
 ```bash
@@ -28,8 +69,8 @@ pip install arc-runtime
 
 For development:
 ```bash
-git clone https://github.com/your-org/arc-runtime.git
-cd arc-runtime
+git clone https://github.com/arc-computer/runtime.git
+cd runtime
 pip install -e .
 ```
 
@@ -59,7 +100,7 @@ response = client.chat.completions.create(
 from runtime import Arc
 
 # Connect to your Arc Core instance
-arc = Arc(endpoint="grpc://arc.yourcompany.com:50051")
+arc = Arc(endpoint="grpc://arc.computer:50051")
 
 # All subsequent OpenAI calls are protected and telemetry is streamed
 ```
@@ -73,7 +114,7 @@ from runtime import Arc
 
 # Explicit configuration
 arc = Arc(
-    endpoint="grpc://arc.company.com:50051",
+    endpoint="grpc://arc.computer:50051",
     api_key="arc_key_xxx",
     log_level="DEBUG"
 )
@@ -127,45 +168,10 @@ Arc Runtime ships with a built-in pattern for preventing high-temperature halluc
 
 | Pattern | Fix | Rationale |
 |---------|-----|-----------|
-| GPT-4/GPT-4.1 with temperature > 0.9 | Set temperature to 0.7 | Reduces hallucination risk while maintaining creativity |
+| GPT-4.1 with temperature > 0.9 | Set temperature to 0.7 | Reduces hallucination risk while maintaining creativity |
 
-## Development
 
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/your-org/arc-runtime.git
-cd arc-runtime
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install in development mode
-pip install -e .
-
-# Install test dependencies
-pip install pytest pytest-asyncio
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-python -m pytest
-
-# Run with coverage
-python -m pytest --cov=runtime
-
-# Run specific test file
-python -m pytest tests/test_golden_requests.py
-
-# Run performance tests
-python tests/test_performance.py
-```
-
-### Testing with Real API
+### Testing
 
 ```bash
 # Set your OpenAI API key
@@ -175,25 +181,7 @@ export OPENAI_API_KEY="sk-..."
 python tests/test_real_api.py
 ```
 
-## Architecture
-
-Arc Runtime uses a multi-layered architecture for minimal overhead:
-
-```
-Your Application
-       ↓
-   Arc Runtime (Interceptor Layer)
-       ├── Pattern Matcher (<1ms lookup)
-       ├── Fix Applicator
-       ├── Telemetry Client (async, non-blocking)
-       └── Metrics Server (:9090/metrics)
-       ↓
-   OpenAI SDK (or other LLM)
-       ↓
-   LLM API
-```
-
-### Components
+## Components
 
 - **Interceptors**: Provider-specific hooks (OpenAI, Anthropic planned)
 - **Pattern Registry**: Thread-safe pattern storage and matching
@@ -240,23 +228,6 @@ Verified performance characteristics:
    ```bash
    pip install grpcio
    ```
-
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-## Production Readiness
-
-See [PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md) for v1.0 production requirements.
-
-Current MVP status:
-- ✅ Zero-config interception
-- ✅ <5ms overhead verified
-- ✅ Thread-safe operation
-- ✅ Pattern matching and fixes
-- ✅ Telemetry streaming
-- ✅ Metrics endpoint
-- ✅ Golden request tests
 
 ## License
 
