@@ -1,0 +1,67 @@
+# Golden Request Test Cases for Arc Runtime
+# These canonical examples verify Arc correctly intercepts and fixes problematic requests
+
+test_cases:
+  - name: "High temperature GPT-4 request"
+    description: "GPT-4 request with temperature 0.95 should be reduced to 0.7"
+    request:
+      model: "gpt-4"
+      messages:
+        - role: "system"
+          content: "You are a helpful assistant."
+        - role: "user"
+          content: "What is the capital of France?"
+      temperature: 0.95
+      max_tokens: 100
+    expected_fix:
+      temperature: 0.7
+    
+  - name: "High temperature GPT-4.1 request"
+    description: "GPT-4.1 request with temperature 0.99 should be reduced to 0.7"
+    request:
+      model: "gpt-4.1"
+      messages:
+        - role: "user"
+          content: "Explain quantum computing"
+      temperature: 0.99
+      top_p: 0.9
+      max_tokens: 200
+    expected_fix:
+      temperature: 0.7
+  
+  - name: "Edge case - temperature exactly 0.9"
+    description: "Temperature exactly at threshold should not be modified"
+    request:
+      model: "gpt-4"
+      messages:
+        - role: "user"
+          content: "Test message"
+      temperature: 0.9
+      stream: true
+    expected_fix: null
+  
+  - name: "Edge case - temperature 0.91"
+    description: "Temperature just above threshold should be reduced"
+    request:
+      model: "gpt-4.1"
+      messages:
+        - role: "assistant"
+          content: "Previous context"
+        - role: "user"
+          content: "Follow up question"
+      temperature: 0.91
+      presence_penalty: 0.5
+    expected_fix:
+      temperature: 0.7
+  
+  - name: "Low temperature request"
+    description: "Requests with temperature <= 0.9 should pass through unchanged"
+    request:
+      model: "gpt-4"
+      messages:
+        - role: "user"
+          content: "Generate a summary"
+      temperature: 0.5
+      frequency_penalty: 0.3
+      max_tokens: 500
+    expected_fix: null

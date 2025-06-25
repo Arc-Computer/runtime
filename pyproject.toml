@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arc-runtime"
+version = "0.1.0"
+description = "Lightweight AI failure prevention system"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Arc Team", email = "team@arc.dev"},
+]
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "wrapt>=1.14.0",
+]
+
+[project.optional-dependencies]
+telemetry = [
+    "grpcio>=1.50.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "openai>=1.0.0",
+    "grpcio>=1.50.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/arc-ai/arc-runtime"
+Documentation = "https://docs.arc.dev"
+Issues = "https://github.com/arc-ai/arc-runtime/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["runtime*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"

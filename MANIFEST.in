@@ -1,0 +1,23 @@
+include README.md
+include LICENSE
+include requirements.txt
+include pyproject.toml
+
+# Include test fixtures
+recursive-include tests/fixtures *.yaml *.md
+
+# Include example scripts
+recursive-include examples *.py
+
+# Include documentation
+recursive-include docs *.md *.html
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude .gitignore
+global-exclude .pytest_cache
+global-exclude *.egg-info
+prune venv
+prune .git
