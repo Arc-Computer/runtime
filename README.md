@@ -38,16 +38,16 @@ graph TB
         SDK[OpenAI/Anthropic SDK]
         Cache[(Local Cache)]
         
-        App -->|1. API Call| Arc
-        Arc -->|2. Check Patterns| Cache
-        Cache -->|3. Apply Fix| Arc
-        Arc -->|4. Modified Request| SDK
+        App --> Arc
+        Arc --> Cache
+        Cache --> Arc
+        Arc --> SDK
     end
     
-    SDK -->|5. Request| API[LLM API]
-    API -->|6. Response| SDK
-    SDK -->|7. Response| Arc
-    Arc -->|8. Response| App
+    SDK --> API[LLM API]
+    API --> SDK
+    SDK --> Arc
+    Arc --> App
     
     subgraph "Arc Core Service"
         Collector[gRPC Collector]
@@ -58,8 +58,8 @@ graph TB
         Detector --> Registry
     end
     
-    Arc -.->|Telemetry| Collector
-    Registry -.->|Pattern Updates| Cache
+    Arc -.-> Collector
+    Registry -.-> Cache
     
     style Arc fill:#4CAF50,stroke:#2E7D32,stroke-width:2px
     style App fill:#2196F3,stroke:#1565C0,stroke-width:2px
@@ -67,6 +67,16 @@ graph TB
     style Collector fill:#E1BEE7,stroke:#9C27B0,stroke-width:2px
     style Registry fill:#FFCDD2,stroke:#D32F2F,stroke-width:2px
 ```
+
+**Request Flow:**
+1. Your AI Application makes an API call
+2. Arc Runtime intercepts the request
+3. Checks local cache for matching failure patterns
+4. Applies fixes if patterns match
+5. Forwards the (potentially modified) request to the LLM SDK
+6. SDK sends request to LLM API
+7. Response flows back through Arc Runtime to your application
+8. Arc Runtime asynchronously streams telemetry to Arc Core
 
 **Key Integration Points:**
 - **Telemetry Streaming**: Arc Runtime streams all request/response data to Arc Core via gRPC
