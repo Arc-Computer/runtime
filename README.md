@@ -31,29 +31,41 @@ Arc Runtime intercepts outgoing LLM API calls and:
 Arc Runtime is the client-side component that sits in your application environment:
 
 ```mermaid
-graph LR
+graph TB
     subgraph "Your Application Environment"
         App[Your AI Application]
-        Arc[Arc Runtime<br/>0.011ms overhead]
-        LLM[OpenAI/Anthropic SDK]
+        Arc[Arc Runtime<br/>Interceptor<br/>0.011ms overhead]
+        SDK[OpenAI/Anthropic SDK]
+        Cache[(Local Pattern<br/>Cache)]
         
-        App --> Arc
-        Arc --> LLM
+        App -->|1. API Call| Arc
+        Arc -->|2. Check Patterns| Cache
+        Cache -->|3. Apply Fix| Arc
+        Arc -->|4. Modified Request| SDK
     end
+    
+    SDK -->|5. Request| API[LLM API]
+    API -->|6. Response| SDK
+    SDK -->|7. Response| Arc
+    Arc -->|8. Response| App
     
     subgraph "Arc Core (Separate Service)"
-        Collector[gRPC Collector]
-        Detector[Failure Detector]
-        Registry[Pattern Registry]
+        Collector[gRPC Collector<br/>Telemetry Ingestion]
+        Detector[Failure Detector<br/>Pattern Learning]
+        Registry[Pattern Registry<br/>Fix Distribution]
         
-        Arc -.->|Telemetry Stream| Collector
-        Registry -.->|Pattern Updates| Arc
+        Collector --> Detector
+        Detector --> Registry
     end
     
-    LLM --> API[LLM API]
+    Arc -.->|Async Telemetry<br/>Stream| Collector
+    Registry -.->|Pattern Updates<br/>via CDN| Cache
     
     style Arc fill:#4CAF50,stroke:#2E7D32,stroke-width:2px
     style App fill:#2196F3,stroke:#1565C0,stroke-width:2px
+    style Cache fill:#FFB74D,stroke:#F57C00,stroke-width:2px
+    style Collector fill:#E1BEE7,stroke:#9C27B0,stroke-width:2px
+    style Registry fill:#FFCDD2,stroke:#D32F2F,stroke-width:2px
 ```
 
 **Key Integration Points:**
