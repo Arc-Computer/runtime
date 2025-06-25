@@ -34,9 +34,9 @@ Arc Runtime is the client-side component that sits in your application environme
 graph TB
     subgraph "Your Application Environment"
         App[Your AI Application]
-        Arc[Arc Runtime Interceptor]
+        Arc[Arc Runtime]
         SDK[OpenAI/Anthropic SDK]
-        Cache[(Local Pattern Cache)]
+        Cache[(Local Cache)]
         
         App -->|1. API Call| Arc
         Arc -->|2. Check Patterns| Cache
@@ -49,17 +49,17 @@ graph TB
     SDK -->|7. Response| Arc
     Arc -->|8. Response| App
     
-    subgraph "Arc Core (Separate Service)"
-        Collector[gRPC Collector for Telemetry Ingestion]
-        Detector[Failure Detector for Pattern Learning]
-        Registry[Pattern Registry for Fix Distribution]
+    subgraph "Arc Core Service"
+        Collector[gRPC Collector]
+        Detector[Failure Detector]
+        Registry[Pattern Registry]
         
         Collector --> Detector
         Detector --> Registry
     end
     
-    Arc -.->|Async Telemetry Stream| Collector
-    Registry -.->|Pattern Updates via CDN| Cache
+    Arc -.->|Telemetry| Collector
+    Registry -.->|Pattern Updates| Cache
     
     style Arc fill:#4CAF50,stroke:#2E7D32,stroke-width:2px
     style App fill:#2196F3,stroke:#1565C0,stroke-width:2px
