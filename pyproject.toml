@@ -43,9 +43,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/arc-ai/arc-runtime"
-Documentation = "https://docs.arc.dev"
-Issues = "https://github.com/arc-ai/arc-runtime/issues"
+Homepage = "https://github.com/arc-computer/runtime"
+Documentation = "https://docs.arc.computer"
+Issues = "https://github.com/arc-computer/runtime/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
