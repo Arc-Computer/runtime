@@ -8,6 +8,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Callable
 
+from runtime.multiagent.context import pipeline_context, get_current_pipeline_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,6 +40,7 @@ class BaseInterceptor(ABC):
         original_func: Callable,
         args: tuple,
         kwargs: dict,
+        agent_metadata: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """
         Common interception logic for all providers
@@ -48,6 +51,7 @@ class BaseInterceptor(ABC):
             original_func: Original method to call
             args: Positional arguments
             kwargs: Keyword arguments
+            agent_metadata: Optional metadata about the calling agent
             
         Returns:
             Response from the original method (potentially with modified args)
@@ -58,8 +62,26 @@ class BaseInterceptor(ABC):
         # Extract request parameters
         request_params = self._extract_params(args, kwargs)
         
-        # Start OTel trace
-        with self.telemetry_client.trace_llm_request(provider, method, request_params) as span:
+        # Get pipeline context if available
+        ctx = pipeline_context.get()
+        pipeline_id = get_current_pipeline_id()
+        
+        # Extract agent name from metadata or context
+        agent_name = None
+        if agent_metadata:
+            agent_name = agent_metadata.get('agent_name')
+        elif ctx:
+            # Try to infer from current execution context or kwargs
+            agent_name = kwargs.get('metadata', {}).get('agent_name')
+        
+        # Start OTel trace with agent metadata
+        with self.telemetry_client.trace_llm_request(
+            provider, 
+            method, 
+            request_params,
+            agent_name=agent_name,
+            pipeline_id=pipeline_id
+        ) as span:
             # Measure Arc interception overhead
             interception_start = time.perf_counter()
             
@@ -102,6 +124,19 @@ class BaseInterceptor(ABC):
                 if fix_applied:
                     self.telemetry_client.metrics.increment("arc_fixes_applied_total")
                 self.telemetry_client.metrics.record_histogram("arc_interception_latency_ms", interception_latency_ms)
+                
+                # Update pipeline context if in multi-agent execution
+                if ctx and agent_name:
+                    ctx['agents'].append({
+                        'name': agent_name,
+                        'type': 'llm',
+                        'provider': provider,
+                        'method': method,
+                        'pattern_matched': pattern_match is not None,
+                        'fix_applied': fix_applied,
+                        'latency_ms': latency_ms,
+                        'timestamp': time.time()
+                    })
                 
                 # Legacy telemetry for backward compatibility
                 self._log_telemetry(

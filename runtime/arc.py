@@ -9,10 +9,12 @@ import threading
 from typing import Optional
 
 from runtime.interceptors.openai import OpenAIInterceptor
+from runtime.interceptors.mcp import MCPInterceptor
 from runtime.patterns.registry import PatternRegistry
 from runtime.telemetry.client import TelemetryClient
 from runtime.telemetry.metrics_server import MetricsServer
 from runtime.config import Config
+from runtime.multiagent.context import MultiAgentContext
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,10 @@ class Arc:
         # Initialize interceptors
         self.interceptors = {
             "openai": OpenAIInterceptor(
+                pattern_registry=self.pattern_registry,
+                telemetry_client=self.telemetry_client,
+            ),
+            "mcp": MCPInterceptor(
                 pattern_registry=self.pattern_registry,
                 telemetry_client=self.telemetry_client,
             ),
@@ -132,3 +138,25 @@ class Arc:
         
         logger.warning(f"No interceptor available for {client_type}")
         return client
+    
+    def create_multiagent_context(
+        self,
+        pipeline_id: Optional[str] = None,
+        application_id: Optional[str] = None
+    ) -> MultiAgentContext:
+        """
+        Create a multi-agent context for tracking pipeline execution
+        
+        Args:
+            pipeline_id: Optional pipeline identifier
+            application_id: Optional business application ID
+            
+        Returns:
+            MultiAgentContext instance
+            
+        Example:
+            with arc.create_multiagent_context(application_id="LOAN-001") as ctx:
+                # Execute multi-agent pipeline
+                pass
+        """
+        return MultiAgentContext(pipeline_id=pipeline_id, application_id=application_id)

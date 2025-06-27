@@ -51,6 +51,15 @@ AGENT_TRAJECTORY = "agent.trajectory"
 AGENT_USER_INPUT = "agent.user_input"
 AGENT_OUTPUT = "agent.output"
 
+# Multi-agent specific attributes
+AGENT_NAME = "agent.name"
+AGENT_TYPE = "agent.type"  # llm, mcp_server, tool
+PIPELINE_ID = "pipeline.id"
+APPLICATION_ID = "application.id"
+CONTEXT_HANDOFF = "context.handoff"
+FAILURE_TYPE = "failure.type"
+BUSINESS_IMPACT = "business.impact"
+
 
 class OTelTelemetryClient:
     """
@@ -152,7 +161,8 @@ class OTelTelemetryClient:
         )
     
     @contextmanager
-    def trace_llm_request(self, provider: str, method: str, request_params: dict):
+    def trace_llm_request(self, provider: str, method: str, request_params: dict, 
+                         agent_name: Optional[str] = None, pipeline_id: Optional[str] = None):
         """
         Context manager for tracing LLM requests with full OTel support
         """
@@ -182,6 +192,12 @@ class OTelTelemetryClient:
                 # Add user input if available
                 if messages and messages[-1].get("role") == "user":
                     span.set_attribute(AGENT_USER_INPUT, messages[-1].get("content", "")[:500])
+                
+                # Add multi-agent attributes
+                if agent_name:
+                    span.set_attribute(AGENT_NAME, agent_name)
+                if pipeline_id:
+                    span.set_attribute(PIPELINE_ID, pipeline_id)
                 
                 yield span
         else:
@@ -295,3 +311,94 @@ class OTelTelemetryClient:
         else:
             # Fallback to logging
             logger.info(f"Event: {name} - {attributes}")
+    
+    @contextmanager
+    def trace_pipeline_execution(self, pipeline_id: str, application_id: Optional[str] = None):
+        """Trace entire multi-agent pipeline execution"""
+        if self.tracer:
+            with self.tracer.start_as_current_span(
+                name="loan_underwriting_pipeline",
+                kind=trace.SpanKind.INTERNAL,
+            ) as span:
+                span.set_attribute(PIPELINE_ID, pipeline_id)
+                if application_id:
+                    span.set_attribute(APPLICATION_ID, application_id)
+                yield span
+        else:
+            yield None
+    
+    @contextmanager
+    def trace_agent_execution(self, agent_name: str, agent_type: str = "llm"):
+        """Trace individual agent execution within pipeline"""
+        if self.tracer:
+            with self.tracer.start_as_current_span(
+                name=f"agent.{agent_name}",
+                kind=trace.SpanKind.INTERNAL,
+            ) as span:
+                span.set_attribute(AGENT_NAME, agent_name)
+                span.set_attribute(AGENT_TYPE, agent_type)
+                yield span
+        else:
+            yield None
+    
+    def record_context_handoff(self, span, from_agent: str, to_agent: str, context_data: dict):
+        """Record context passed between agents"""
+        if not span:
+            return
+        
+        handoff_event = {
+            "from": from_agent,
+            "to": to_agent,
+            "context_keys": list(context_data.keys()),
+            "context_size": len(json.dumps(context_data))
+        }
+        
+        span.add_event("context_handoff", handoff_event)
+        span.set_attribute(f"{CONTEXT_HANDOFF}.{from_agent}_to_{to_agent}", json.dumps(handoff_event))
+    
+    def record_failure(self, span, failure_type: str, business_impact: str = "medium"):
+        """Record a detected failure for training data"""
+        if not span:
+            return
+            
+        span.set_attribute(FAILURE_TYPE, failure_type)
+        span.set_attribute(BUSINESS_IMPACT, business_impact)
+        span.set_attribute("failure_detected", True)
+        
+        # Add failure event
+        span.add_event("failure_detected", {
+            "type": failure_type,
+            "impact": business_impact,
+            "timestamp": time.time()
+        })
+    
+    @contextmanager
+    def trace_mcp_call(self, endpoint: str, method: str, agent_name: Optional[str] = None, 
+                       pipeline_id: Optional[str] = None, request_data: Optional[dict] = None):
+        """Trace MCP server calls"""
+        if self.tracer:
+            with self.tracer.start_as_current_span(
+                name=f"mcp.{endpoint.split('/')[-1]}",
+                kind=trace.SpanKind.CLIENT,
+            ) as span:
+                span.set_attribute("mcp.endpoint", endpoint)
+                span.set_attribute("mcp.method", method)
+                if agent_name:
+                    span.set_attribute(AGENT_NAME, agent_name)
+                if pipeline_id:
+                    span.set_attribute(PIPELINE_ID, pipeline_id)
+                if request_data:
+                    span.set_attribute("mcp.request", json.dumps(request_data)[:1000])
+                yield span
+        else:
+            yield None
+    
+    def record_mcp_response(self, span, response_data: Optional[dict], latency_ms: float, status_code: int):
+        """Record MCP server response"""
+        if not span:
+            return
+            
+        span.set_attribute("mcp.status_code", status_code)
+        span.set_attribute("mcp.latency_ms", latency_ms)
+        if response_data:
+            span.set_attribute("mcp.response", json.dumps(response_data)[:1000])
