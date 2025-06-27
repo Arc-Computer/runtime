@@ -5,15 +5,16 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "arc-runtime"
 version = "0.1.1"
-description = "Lightweight AI failure prevention system"
+description = "Lightweight Python interceptor that prevents AI agent failures in real-time"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
-    {name = "Arc Team", email = "team@arc.dev"},
+    {name = "Arc Intelligence, Inc.", email = "Jarrod@arc.computer"},
 ]
 requires-python = ">=3.8"
+keywords = ["ai", "llm", "openai", "anthropic", "reliability", "monitoring", "telemetry", "interceptor"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -25,6 +26,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 
 dependencies = [
@@ -34,22 +37,33 @@ dependencies = [
 [project.optional-dependencies]
 telemetry = [
     "grpcio>=1.50.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-instrumentation>=0.41b0",
 ]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
     "openai>=1.0.0",
     "grpcio>=1.50.0",
+    "twine>=4.0.0",
+    "wheel>=0.40.0",
+    "build>=0.10.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/arc-computer/runtime"
-Documentation = "https://docs.arc.computer"
-Issues = "https://github.com/arc-computer/runtime/issues"
+"Homepage" = "https://github.com/arc-computer/runtime"
+"Documentation" = "https://github.com/arc-computer/runtime#readme"
+"Bug Tracker" = "https://github.com/arc-computer/runtime/issues"
+"Source Code" = "https://github.com/arc-computer/runtime"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["runtime*"]
+
+[tool.setuptools.package-data]
+runtime = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
