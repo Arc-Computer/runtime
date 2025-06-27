@@ -7,7 +7,6 @@ name = "arc-runtime"
 version = "0.1.1"
 description = "Lightweight Python interceptor that prevents AI agent failures in real-time"
 readme = "README.md"
-license = "MIT"
 authors = [
     {name = "Arc Intelligence, Inc.", email = "Jarrod@arc.computer"},
 ]
@@ -64,6 +63,9 @@ include = ["runtime*"]
 
 [tool.setuptools.package-data]
 runtime = ["py.typed"]
+
+[tool.setuptools]
+license-files = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
