@@ -203,9 +203,9 @@ with arc.create_multiagent_context(application_id="LOAN-2024-001") as ctx:
     
     # Track context handoffs between agents
     ctx.add_context_handoff(
-        "loan_officer",
-        "credit_analyst",
-        {"loan_amount": 250000, "initial_assessment": "positive"}
+        from_agent="loan_officer",
+        to_agent="credit_analyst",
+        context={"loan_amount": 250000, "initial_assessment": "positive"}
     )
     
     # Get pipeline summary

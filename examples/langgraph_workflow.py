@@ -102,7 +102,11 @@ def make_decision(state: LoanApplicationState) -> LoanApplicationState:
 
 
 def should_approve(state: LoanApplicationState) -> Literal["approve", "deny"]:
-    """Routing function to determine next step."""
+    """Routing function to determine next step.
+    
+    Note: This function is included as an example of conditional routing
+    but is not used in the current linear workflow.
+    """
     if state.get("risk_assessment") == "LOW RISK":
         return "approve"
     return "deny"

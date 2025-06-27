@@ -98,8 +98,8 @@ def main():
             
             summary = ctx.get_pipeline_summary()
             print(f"Pipeline tracked {summary['agents_executed']} agent(s)")
-    except:
-        print("(Enable with real API key)")
+    except Exception as e:
+        print(f"Multi-agent demo skipped: {type(e).__name__}")
     
     print("\n" + "=" * 50)
     print("Check the logs above to see Arc Runtime in action!")
