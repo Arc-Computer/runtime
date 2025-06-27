@@ -14,6 +14,9 @@ Arc Runtime is a lightweight Python interceptor that prevents AI agent failures 
 - **Ultra-low latency** - 0.011ms P99 overhead (99.78% better than 5ms requirement)
 - **Thread-safe** - Works seamlessly with async and multi-threaded applications
 - **Pattern matching** - Real-time detection and fixing of known failure patterns
+- **Multi-agent support** - Track complex agent pipelines with context handoffs
+- **MCP interception** - Monitor Model Context Protocol communications
+- **LangGraph integration** - Automatic tracking for LangGraph workflows
 - **OpenTelemetry support** - Full agent telemetry capture (reasoning traces, tool calls, tokens)
 - **Graceful degradation** - Never breaks your application if Arc Core is unreachable
 - **Local metrics** - Prometheus endpoint at http://localhost:9090/metrics
@@ -171,6 +174,65 @@ arc.register_pattern(
 )
 ```
 
+## Multi-Agent Pipelines
+
+Track complex multi-agent workflows with automatic context propagation:
+
+```python
+from runtime import Arc
+import openai
+
+arc = Arc()
+client = openai.OpenAI()
+
+# Track a loan underwriting pipeline
+with arc.create_multiagent_context(application_id="LOAN-2024-001") as ctx:
+    # Loan officer agent
+    response1 = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": "Analyze loan application"}],
+        extra_headers={"X-Agent-Name": "loan_officer"}
+    )
+    
+    # Credit analyst agent
+    response2 = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": "Review credit history"}],
+        extra_headers={"X-Agent-Name": "credit_analyst"}
+    )
+    
+    # Track context handoffs between agents
+    ctx.add_context_handoff(
+        from_agent="loan_officer",
+        to_agent="credit_analyst",
+        context={"loan_amount": 250000, "initial_assessment": "positive"}
+    )
+    
+    # Get pipeline summary
+    summary = ctx.get_pipeline_summary()
+    print(f"Agents executed: {summary['agents_executed']}")
+    print(f"Total latency: {summary['total_latency_ms']}ms")
+```
+
+### LangGraph Integration
+
+Automatically track LangGraph workflows:
+
+```python
+from runtime import ArcStateGraph
+
+# Use ArcStateGraph instead of StateGraph
+workflow = ArcStateGraph()
+
+# Nodes are automatically tracked
+workflow.add_node("process_application", process_application_fn)
+workflow.add_node("verify_documents", verify_documents_fn)
+
+# Compile and run - Arc tracks everything
+app = workflow.compile()
+result = app.invoke({"application_id": "APP-123"})
+```
+
 ## Manual Wrapping
 
 If auto-patching fails, you can explicitly wrap clients:
@@ -205,9 +267,12 @@ python tests/test_real_api.py
 
 ## Components
 
-- **Interceptors**: Provider-specific hooks (OpenAI, Anthropic planned)
+- **Interceptors**: Provider-specific hooks (OpenAI, MCP, Anthropic planned)
 - **Pattern Registry**: Thread-safe pattern storage and matching
-- **Telemetry Client**: OpenTelemetry-compatible async streaming
+- **Multi-Agent Context**: Pipeline execution tracking with context handoffs
+- **MCP Interceptor**: Model Context Protocol monitoring
+- **LangGraph Integration**: Automatic workflow tracking
+- **Telemetry Client**: OpenTelemetry-compatible async streaming with agent tracing
 - **Metrics Server**: Prometheus-compatible metrics endpoint
 
 ## Performance
