@@ -7,7 +7,22 @@ with multi-agent orchestration.
 """
 
 import os
+import sys
 from typing import TypedDict, Literal
+
+# Add parent directory to path for runtime import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load environment variables
+from pathlib import Path
+env_path = Path(__file__).parent.parent / '.env'
+if env_path.exists():
+    with open(env_path) as f:
+        for line in f:
+            if '=' in line and not line.strip().startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ[key] = value
+
 from runtime import Arc, ArcStateGraph
 
 # Initialize Arc Runtime
@@ -96,6 +111,9 @@ def should_approve(state: LoanApplicationState) -> Literal["approve", "deny"]:
 def create_loan_workflow():
     """Create the loan processing workflow with Arc tracking."""
     
+    if not HAS_LANGGRAPH:
+        return None
+    
     # Use ArcStateGraph instead of StateGraph for automatic tracking
     workflow = ArcStateGraph(LoanApplicationState)
     
@@ -140,7 +158,7 @@ def process_loan_application(application_id: str):
         print("\nExecuting workflow...")
         
         # Run the workflow - Arc automatically tracks all agent executions
-        if HAS_LANGGRAPH:
+        if HAS_LANGGRAPH and app:
             result = app.invoke(initial_state)
         else:
             # Simulate workflow execution for demo

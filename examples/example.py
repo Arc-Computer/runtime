@@ -4,7 +4,21 @@ Demonstrates automatic AI failure prevention and multi-agent tracking
 """
 
 import os
+import sys
 import logging
+
+# Add parent directory to path for runtime import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load environment variables
+from pathlib import Path
+env_path = Path(__file__).parent.parent / '.env'
+if env_path.exists():
+    with open(env_path) as f:
+        for line in f:
+            if '=' in line and not line.strip().startswith('#'):
+                key, value = line.strip().split('=', 1)
+                os.environ[key] = value
 
 # Enable debug logging to see Arc in action
 logging.basicConfig(
