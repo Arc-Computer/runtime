@@ -1,6 +1,6 @@
 """
 Arc Runtime - Hello World Example
-Demonstrates automatic AI failure prevention
+Demonstrates automatic AI failure prevention and multi-agent tracking
 """
 
 import os
@@ -15,6 +15,9 @@ logging.basicConfig(
 # Import Arc Runtime BEFORE OpenAI
 # This automatically patches the OpenAI client
 from runtime import Arc
+
+# Initialize Arc
+arc = Arc()
 
 # Now import and use OpenAI normally
 import openai
@@ -63,6 +66,26 @@ def main():
     except Exception as e:
         print(f"\nNote: To run with real API calls, set OPENAI_API_KEY environment variable")
         print(f"Error: {e}")
+    
+    # Demonstrate multi-agent tracking (optional)
+    print("\n" + "=" * 50)
+    print("\nBonus: Multi-Agent Tracking Example")
+    print("-" * 50)
+    
+    try:
+        with arc.create_multiagent_context(application_id="EXAMPLE-001") as ctx:
+            # Make a call with agent metadata
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": "Hi!"}],
+                max_tokens=10,
+                extra_headers={"X-Agent-Name": "greeting_agent"}
+            )
+            
+            summary = ctx.get_pipeline_summary()
+            print(f"Pipeline tracked {summary['agents_executed']} agent(s)")
+    except:
+        print("(Enable with real API key)")
     
     print("\n" + "=" * 50)
     print("Check the logs above to see Arc Runtime in action!")
