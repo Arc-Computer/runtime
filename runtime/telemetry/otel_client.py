@@ -85,7 +85,7 @@ class OTelTelemetryClient:
             # Create resource
             resource = Resource.create({
                 "service.name": self.service_name,
-                "service.version": "0.1.0",
+                "service.version": "0.1.1",
             })
             
             # Setup tracing
@@ -104,12 +104,12 @@ class OTelTelemetryClient:
                 logger.debug(f"OTLP exporter not available: {e}")
             
             # Get tracer
-            self.tracer = trace.get_tracer(__name__, "0.1.0")
+            self.tracer = trace.get_tracer(__name__, "0.1.1")
             
             # Setup metrics
             metrics_provider = MeterProvider(resource=resource)
             metrics.set_meter_provider(metrics_provider)
-            self.meter = metrics.get_meter(__name__, "0.1.0")
+            self.meter = metrics.get_meter(__name__, "0.1.1")
             
             # Create metrics
             self._create_metrics()

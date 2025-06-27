@@ -2,7 +2,7 @@
 Arc Runtime - Lightweight AI failure prevention system
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import sys

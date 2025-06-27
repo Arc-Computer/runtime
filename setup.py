@@ -10,7 +10,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="arc-runtime",
-    version="0.1.0",
+    version="0.1.1",
     author="Arc Intelligence, Inc.",
     author_email="Jarrod@arc.computer",
     description="Lightweight Python interceptor that prevents AI agent failures in real-time",
