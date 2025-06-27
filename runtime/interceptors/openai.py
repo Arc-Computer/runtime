@@ -31,12 +31,15 @@ class OpenAIInterceptor(BaseInterceptor):
             if self._patched:
                 return
                 
-            # Check if openai is already imported
-            if "openai" in sys.modules:
+            # Always try to patch, whether openai is imported or not
+            try:
+                import openai
                 self._patch_existing()
-            
-            # Install import hook for future imports
-            self._install_import_hook()
+                logger.debug("Patched OpenAI after import")
+            except ImportError:
+                # OpenAI not yet imported, install import hook
+                self._install_import_hook()
+                logger.debug("Installed OpenAI import hook")
             
             self._patched = True
     
@@ -60,31 +63,47 @@ class OpenAIInterceptor(BaseInterceptor):
     
     def _install_import_hook(self):
         """Install import hook to patch OpenAI on import"""
+        import importlib.abc
+        import importlib.machinery
         
-        class OpenAIImportHook:
+        class OpenAIImportHook(importlib.abc.MetaPathFinder):
             def __init__(self, interceptor):
                 self.interceptor = interceptor
+                self._loading = False
             
-            def find_module(self, fullname, path=None):
-                if fullname == "openai":
-                    return self
+            def find_spec(self, fullname, path, target=None):
+                if fullname == "openai" and not self._loading:
+                    # Return a spec that will trigger our exec_module
+                    from importlib.machinery import ModuleSpec
+                    return ModuleSpec(fullname, self)
                 return None
             
-            def load_module(self, fullname):
-                # Import the module normally
-                if fullname in sys.modules:
-                    return sys.modules[fullname]
-                
-                # Use importlib to import the module
-                import importlib
-                module = importlib.import_module(fullname)
-                
-                # Patch it
-                self.interceptor._patch_existing()
-                
-                return module
+            def create_module(self, spec):
+                # Return None to use default module creation
+                return None
+            
+            def exec_module(self, module):
+                # Prevent recursion
+                self._loading = True
+                try:
+                    # Let the real import happen
+                    import importlib
+                    spec = importlib.util.find_spec('openai')
+                    if spec and spec.loader:
+                        spec.loader.exec_module(module)
+                    
+                    # Now patch it
+                    self.interceptor._patch_existing()
+                    logger.debug("Patched OpenAI via import hook")
+                finally:
+                    self._loading = False
         
-        # Add to meta_path
+        # Remove any existing hooks for OpenAI
+        sys.meta_path = [h for h in sys.meta_path 
+                        if not (hasattr(h, '__class__') and 
+                               h.__class__.__name__ == 'OpenAIImportHook')]
+        
+        # Add our hook
         sys.meta_path.insert(0, OpenAIImportHook(self))
     
     def _patch_client_class(self, client_class):
@@ -100,8 +119,10 @@ class OpenAIInterceptor(BaseInterceptor):
             # Patch the chat.completions.create method on this instance
             if hasattr(self, "chat") and hasattr(self.chat, "completions"):
                 interceptor._patch_completions(self.chat.completions)
+                logger.debug(f"Patched completions for {client_class.__name__} instance")
         
         client_class.__init__ = patched_init
+        logger.debug(f"Patched {client_class.__name__} __init__ method")
     
     def _patch_completions(self, completions_resource):
         """Patch the completions resource create method"""
@@ -114,12 +135,20 @@ class OpenAIInterceptor(BaseInterceptor):
         @wrapt.synchronized
         @functools.wraps(original_create)
         def patched_create(*args, **kwargs):
+            # Extract agent metadata from extra_headers if present
+            agent_metadata = None
+            if 'extra_headers' in kwargs and isinstance(kwargs['extra_headers'], dict):
+                agent_metadata = {
+                    'agent_name': kwargs['extra_headers'].get('X-Agent-Name')
+                }
+            
             return interceptor._intercept_request(
                 provider="openai",
                 method="chat.completions.create",
                 original_func=original_create,
                 args=args,
                 kwargs=kwargs,
+                agent_metadata=agent_metadata
             )
         
         completions_resource.create = patched_create

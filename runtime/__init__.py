@@ -20,5 +20,9 @@ else:
     # Auto-initialize with default settings
     _default_arc = Arc()
 
+# Import multi-agent components for easier access
+from runtime.multiagent import MultiAgentContext
+from runtime.integrations import ArcStateGraph
+
 # Public API
-__all__ = ["Arc"]
+__all__ = ["Arc", "MultiAgentContext", "ArcStateGraph"]

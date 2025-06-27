@@ -193,6 +193,7 @@ logs/
 *.bak
 *.backup
 *~
+CLAUDE.md
 
 # Package manager locks (keeping requirements.txt)
 # Pipfile.lock
