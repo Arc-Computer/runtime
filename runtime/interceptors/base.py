@@ -127,7 +127,7 @@ class BaseInterceptor(ABC):
                 
                 # Update pipeline context if in multi-agent execution
                 if ctx and agent_name:
-                    ctx['agents'].append({
+                    agent_record = {
                         'name': agent_name,
                         'type': 'llm',
                         'provider': provider,
@@ -136,7 +136,14 @@ class BaseInterceptor(ABC):
                         'fix_applied': fix_applied,
                         'latency_ms': latency_ms,
                         'timestamp': time.time()
-                    })
+                    }
+                    
+                    # Update context variable
+                    ctx['agents'].append(agent_record)
+                    
+                    # Update MultiAgentContext instance if available
+                    if 'instance' in ctx and hasattr(ctx['instance'], 'agents'):
+                        ctx['instance'].agents.append(agent_record)
                 
                 # Legacy telemetry for backward compatibility
                 self._log_telemetry(

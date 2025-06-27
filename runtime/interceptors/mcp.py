@@ -222,14 +222,21 @@ class MCPInterceptor(BaseInterceptor):
             
             # Update pipeline context
             if ctx and mcp_metadata.get('agent_name'):
-                ctx['agents'].append({
+                agent_record = {
                     'name': mcp_metadata['agent_name'],
                     'type': 'mcp_server',
                     'operation': mcp_metadata['mcp_operation'],
                     'endpoint': str(url),
                     'latency_ms': latency_ms,
                     'timestamp': time.time()
-                })
+                }
+                
+                # Update context variable
+                ctx['agents'].append(agent_record)
+                
+                # Update MultiAgentContext instance if available
+                if 'instance' in ctx and hasattr(ctx['instance'], 'agents'):
+                    ctx['instance'].agents.append(agent_record)
             
             # Log the interception
             logger.debug(
@@ -321,14 +328,21 @@ class MCPInterceptor(BaseInterceptor):
             
             # Update pipeline context
             if ctx and mcp_metadata.get('agent_name'):
-                ctx['agents'].append({
+                agent_record = {
                     'name': mcp_metadata['agent_name'],
                     'type': 'mcp_server',
                     'operation': mcp_metadata['mcp_operation'],
                     'endpoint': str(url),
                     'latency_ms': latency_ms,
                     'timestamp': time.time()
-                })
+                }
+                
+                # Update context variable
+                ctx['agents'].append(agent_record)
+                
+                # Update MultiAgentContext instance if available
+                if 'instance' in ctx and hasattr(ctx['instance'], 'agents'):
+                    ctx['instance'].agents.append(agent_record)
             
             # Log the interception
             logger.debug(

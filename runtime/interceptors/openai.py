@@ -135,12 +135,20 @@ class OpenAIInterceptor(BaseInterceptor):
         @wrapt.synchronized
         @functools.wraps(original_create)
         def patched_create(*args, **kwargs):
+            # Extract agent metadata from extra_headers if present
+            agent_metadata = None
+            if 'extra_headers' in kwargs and isinstance(kwargs['extra_headers'], dict):
+                agent_metadata = {
+                    'agent_name': kwargs['extra_headers'].get('X-Agent-Name')
+                }
+            
             return interceptor._intercept_request(
                 provider="openai",
                 method="chat.completions.create",
                 original_func=original_create,
                 args=args,
                 kwargs=kwargs,
+                agent_metadata=agent_metadata
             )
         
         completions_resource.create = patched_create

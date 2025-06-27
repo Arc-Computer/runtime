@@ -50,13 +50,14 @@ class MultiAgentContext:
         """Enter the context manager and set up pipeline context."""
         self.start_time = time.time()
         
-        # Set up context variable with fresh lists
+        # Set up context variable with fresh lists and instance reference
         ctx_data = {
             'pipeline_id': self.pipeline_id,
             'application_id': self.application_id,
             'agents': [],  # Use fresh list for context var
             'context_handoffs': [],  # Use fresh list for context var
-            'start_time': self.start_time
+            'start_time': self.start_time,
+            'instance': self  # Store reference to MultiAgentContext instance
         }
         self._token = pipeline_context.set(ctx_data)
         
