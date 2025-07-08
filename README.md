@@ -119,13 +119,16 @@ response = client.chat.completions.create(
 )
 ```
 
-### With Telemetry Endpoint
+### With Arc Core (Production)
 
 ```python
 from runtime import Arc
 
-# Connect to your Arc Core instance
-arc = Arc(endpoint="grpc://arc.computer:50051")
+# Connect to Arc Core via Kong Gateway
+arc = Arc(
+    endpoint="grpc://your-kong-host:9080",  # Kong gRPC proxy
+    api_key="arc_live_your_api_key_here"   # Customer API key
+)
 
 # All subsequent OpenAI calls are protected and telemetry is streamed
 ```
