@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arc-runtime"
-version = "0.1.2"
+version = "0.1.3"
 description = "Lightweight Python interceptor that prevents AI agent failures in real-time"
 readme = "README.md"
 authors = [
@@ -33,6 +33,7 @@ dependencies = [
     "wrapt>=1.14.0",
     "grpcio>=1.50.0",
     "protobuf>=3.20.0,<6.0.0",
+    "httpx>=0.25.0",
 ]
 
 [project.optional-dependencies]

@@ -158,6 +158,9 @@ cython_debug/
 ehthumbs.db
 Thumbs.db
 
+# Test environments
+test_env/
+
 # Arc Runtime specific
 *.arc
 arc_telemetry/
