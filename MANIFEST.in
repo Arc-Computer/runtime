@@ -9,6 +9,9 @@ recursive-include tests/fixtures *.yaml *.md
 # Include example scripts
 recursive-include examples *.py
 
+# Include proto files
+recursive-include runtime/proto *.proto
+
 # Include documentation
 recursive-include docs *.md *.html
 
