@@ -147,7 +147,7 @@ arc = Arc(
 
 Environment variables:
 - `ARC_DISABLE=1` - Disable Arc Runtime completely
-- `ARC_ENDPOINT` - gRPC endpoint for telemetry (default: grpc://localhost:50051)
+- `ARC_ENDPOINT` - gRPC endpoint for telemetry streaming to Arc Core (default: grpc://localhost:50051)
 - `ARC_API_KEY` - API key for Arc Core
 - `ARC_LOG_LEVEL` - Logging level (default: INFO)
 

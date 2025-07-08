@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package arc.telemetry.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// The service definition for receiving telemetry from Arc Runtime.
+service TelemetryService {
+  // A client-streaming RPC.
+  // The runtime client opens a stream and sends a sequence of events.
+  // The server processes them as a batch once the client closes the stream.
+  rpc StreamTelemetry(stream TelemetryEvent) returns (StreamTelemetryResponse);
+}
+
+// Represents a single telemetry event from an agent interaction.
+message TelemetryEvent {
+  string request_id = 1;
+  string pipeline_id = 2;
+  string application_id = 3;
+  string agent_name = 4;
+  google.protobuf.Timestamp timestamp = 5;
+
+  message LLMInteraction {
+    string provider = 1;
+    string model = 2;
+    string request_body = 3;
+    string response_body = 4;
+    float latency_ms = 5;
+    int32 prompt_tokens = 6;
+    int32 completion_tokens = 7;
+  }
+  LLMInteraction llm_interaction = 6;
+
+  message ArcIntervention {
+    bool pattern_matched = 1;
+    string fix_applied = 2;
+    float interception_latency_ms = 3;
+  }
+  ArcIntervention arc_intervention = 7;
+
+  message ErrorInfo {
+    string error_type = 1;
+    string error_message = 2;
+    string stack_trace = 3;
+  }
+  optional ErrorInfo error = 8;
+
+  map<string, string> metadata = 9;
+}
+
+message StreamTelemetryResponse {
+  bool success = 1;
+  uint32 events_received = 2;
+  string message = 3;
+}
