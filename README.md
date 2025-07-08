@@ -6,44 +6,157 @@
 [![Performance](https://img.shields.io/badge/P99%20Latency-0.011ms-brightgreen.svg)](docs/performance_report.md)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-enabled-blueviolet.svg)](https://opentelemetry.io/)
 
-Arc Runtime is a lightweight Python interceptor that prevents AI agent failures in real-time by applying learned fixes before requests reach the LLM. It's the client-side component of the Arc AI reliability system, designed to work with Arc Core. 
+> **For Team Members**: This is the client-side SDK that customers integrate into their applications to enable Arc AI reliability. It intercepts LLM calls, applies learned fixes, and streams telemetry to Arc Core.
 
-## Key Features
+## What is Arc Runtime?
 
-- **Zero-config interception** - Just import and it works
-- **Ultra-low latency** - 0.011ms P99 overhead (99.78% better than 5ms requirement)
-- **Thread-safe** - Works seamlessly with async and multi-threaded applications
-- **Pattern matching** - Real-time detection and fixing of known failure patterns
-- **Multi-agent support** - Track complex agent pipelines with context handoffs
-- **MCP interception** - Monitor Model Context Protocol communications
-- **LangGraph integration** - Automatic tracking for LangGraph workflows
-- **OpenTelemetry support** - Full agent telemetry capture (reasoning traces, tool calls, tokens)
-- **Graceful degradation** - Never breaks your application if Arc Core is unreachable
-- **Local metrics** - Prometheus endpoint at http://localhost:9090/metrics
+Arc Runtime is a lightweight Python interceptor that prevents AI agent failures in real-time. It's the **client-side component** of our Arc AI reliability system - the part that customers install in their applications.
 
-## How It Works
+**Key Insight**: Arc Runtime is invisible to customer applications. It patches LLM SDKs automatically and applies fixes *before* requests reach the LLM, creating a seamless reliability layer.
 
-Arc Runtime intercepts outgoing LLM API calls and:
-1. Matches requests against known failure patterns (<1ms)
-2. Applies fixes before the request reaches the LLM
-3. Streams telemetry to Arc Core for continuous learning
-4. Exposes metrics for monitoring
+---
 
-## System Architecture
+## 🚀 Quick Start (Tutorial)
 
-Arc Runtime is the client-side component that sits in your application environment:
+### 1. Development Setup
+
+```bash
+git clone https://github.com/arc-computer/runtime.git
+cd runtime
+pip install -e ".[dev]"
+```
+
+### 2. Basic Usage
+
+```python
+import openai
+from runtime import Arc
+
+# Initialize Arc - automatically patches OpenAI
+Arc()
+
+# Customer uses OpenAI normally - Arc protects silently
+client = openai.OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4.1",
+    messages=[{"role": "user", "content": "Hello"}],
+    temperature=0.95  # Arc will fix this to 0.7 automatically
+)
+```
+
+### 3. With Arc Core (Production)
+
+```python
+from runtime import Arc
+
+# Connect to Arc Core via Kong Gateway
+arc = Arc(
+    endpoint="grpc://kong.arc.computer:9080",  # Kong gRPC proxy
+    api_key="arc_live_customer_key_here"      # Customer API key
+)
+
+# All subsequent LLM calls are protected and telemetry streams to Arc Core
+```
+
+---
+
+## 📖 How-To Guides
+
+### Multi-Agent Pipeline Tracking
+
+```python
+from runtime import Arc
+import openai
+
+arc = Arc()
+client = openai.OpenAI()
+
+# Track complex agent workflows
+with arc.create_multiagent_context(application_id="LOAN-2024-001") as ctx:
+    # Each agent call is automatically tracked
+    response1 = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[{"role": "user", "content": "Analyze loan application"}],
+        extra_headers={"X-Agent-Name": "loan_officer"}
+    )
+    
+    response2 = client.chat.completions.create(
+        model="gpt-4.1", 
+        messages=[{"role": "user", "content": "Review credit history"}],
+        extra_headers={"X-Agent-Name": "credit_analyst"}
+    )
+    
+    # Track context handoffs
+    ctx.add_context_handoff(
+        from_agent="loan_officer",
+        to_agent="credit_analyst", 
+        context={"loan_amount": 250000, "assessment": "positive"}
+    )
+    
+    # Get pipeline metrics
+    summary = ctx.get_pipeline_summary()
+```
+
+### LangGraph Integration
+
+```python
+from runtime import ArcStateGraph
+
+# Use ArcStateGraph instead of StateGraph for automatic tracking
+workflow = ArcStateGraph()
+
+# Add nodes - each is tracked as an agent
+workflow.add_node("process_application", process_fn)
+workflow.add_node("verify_documents", verify_fn)
+
+# Compile and run - Arc tracks everything
+app = workflow.compile()
+result = app.invoke({"application_id": "APP-123"})
+```
+
+### Custom Pattern Registration
+
+```python
+arc = Arc()
+
+# Register custom failure patterns
+arc.register_pattern(
+    pattern={"model": "gpt-4.1", "temperature": {">": 0.9}},
+    fix={"temperature": 0.7}
+)
+
+# Pattern will be applied automatically to matching requests
+```
+
+### Testing with Real APIs
+
+```bash
+# Set API key
+export OPENAI_API_KEY="sk-..."
+
+# Run integration tests
+python tests/test_real_api.py
+
+# Performance benchmarks
+python tests/test_performance.py
+```
+
+---
+
+## 🔧 Technical Reference
+
+### System Architecture
 
 ```mermaid
 graph TB
-    subgraph "Your Application Environment"
-        App[Your AI Application]
+    subgraph "Customer Application"
+        App[Customer App]
         Arc[Arc Runtime]
-        SDK[OpenAI/Anthropic SDK]
-        Cache[(Local Cache)]
+        SDK[OpenAI SDK]
+        Cache[(Pattern Cache)]
         
         App --> Arc
         Arc --> Cache
-        Cache --> Arc
         Arc --> SDK
     end
     
@@ -52,252 +165,131 @@ graph TB
     SDK --> Arc
     Arc --> App
     
-    subgraph "Arc Core Service"
-        Collector[gRPC Collector]
-        Detector[Failure Detector]
-        Registry[Pattern Registry]
+    subgraph "Arc Core (Our Infrastructure)"
+        Kong[Kong Gateway]
+        Core[Arc Core Service]
+        DB[(Pattern Database)]
         
-        Collector --> Detector
-        Detector --> Registry
+        Kong --> Core
+        Core --> DB
     end
     
-    Arc -.-> Collector
-    Registry -.-> Cache
-    
-    style Arc fill:#4CAF50,stroke:#2E7D32,stroke-width:2px
-    style App fill:#2196F3,stroke:#1565C0,stroke-width:2px
-    style Cache fill:#FFB74D,stroke:#F57C00,stroke-width:2px
-    style Collector fill:#E1BEE7,stroke:#9C27B0,stroke-width:2px
-    style Registry fill:#FFCDD2,stroke:#D32F2F,stroke-width:2px
+    Arc -.-> Kong
+    DB -.-> Cache
 ```
 
-**Request Flow:**
-1. Your AI Application makes an API call
-2. Arc Runtime intercepts the request
-3. Checks local cache for matching failure patterns
-4. Applies fixes if patterns match
-5. Forwards the (potentially modified) request to the LLM SDK
-6. SDK sends request to LLM API
-7. Response flows back through Arc Runtime to your application
-8. Arc Runtime asynchronously streams telemetry to Arc Core
+### Core Components
 
-**Key Integration Points:**
-- **Telemetry Streaming**: Arc Runtime streams all request/response data to Arc Core via gRPC
-- **Pattern Updates**: Arc Core pushes new failure patterns and fixes to Runtime instances
-- **Metrics Export**: Local Prometheus endpoint for monitoring Arc Runtime performance
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| **Arc Singleton** | Main coordinator, manages interceptor lifecycle | `runtime/arc.py` |
+| **OpenAI Interceptor** | Patches OpenAI SDK, applies fixes | `runtime/interceptors/openai.py` |
+| **Pattern Registry** | Thread-safe pattern storage and matching | `runtime/patterns/` |
+| **Multi-Agent Context** | Pipeline execution tracking | `runtime/multiagent/` |
+| **Telemetry Client** | gRPC streaming to Arc Core | `runtime/telemetry/` |
+| **MCP Interceptor** | Model Context Protocol monitoring | `runtime/interceptors/mcp.py` |
+| **LangGraph Integration** | Automatic workflow tracking | `runtime/integrations/langgraph.py` |
 
-## Installation
-
-```bash
-pip install arc-runtime
-```
-
-For development:
-```bash
-git clone https://github.com/arc-computer/runtime.git
-cd runtime
-pip install -e .
-```
-
-## Quick Start
-
-### Zero Configuration
-
-```python
-import openai
-from runtime import Arc
-
-# Initialize Arc - this automatically patches OpenAI
-Arc()
-
-# Use OpenAI as normal - Arc protects your calls
-client = openai.OpenAI()  # Uses API key from environment
-response = client.chat.completions.create(
-    model="gpt-4.1",
-    messages=[{"role": "user", "content": "Write a poem about Python"}],
-    temperature=0.95  # Arc automatically fixes this to 0.7
-)
-```
-
-### With Arc Core (Production)
+### Configuration Options
 
 ```python
 from runtime import Arc
 
-# Connect to Arc Core via Kong Gateway
 arc = Arc(
-    endpoint="grpc://your-kong-host:9080",  # Kong gRPC proxy
-    api_key="arc_live_your_api_key_here"   # Customer API key
-)
-
-# All subsequent OpenAI calls are protected and telemetry is streamed
-```
-
-## Configuration
-
-Arc Runtime can be configured via environment variables or constructor args:
-
-```python
-from runtime import Arc
-
-# Explicit configuration
-arc = Arc(
-    endpoint="grpc://arc.computer:50051",
-    api_key="arc_key_xxx",
-    log_level="DEBUG"
+    endpoint="grpc://kong.arc.computer:9080",  # gRPC endpoint
+    api_key="arc_live_...",                    # Customer API key
+    log_level="DEBUG"                          # Logging level
 )
 ```
 
-Environment variables:
-- `ARC_DISABLE=1` - Disable Arc Runtime completely
-- `ARC_ENDPOINT` - gRPC endpoint for telemetry streaming to Arc Core (default: grpc://localhost:50051)
+**Environment Variables:**
+- `ARC_DISABLE=1` - Disable Arc completely
+- `ARC_ENDPOINT` - gRPC endpoint (default: grpc://localhost:50051)
 - `ARC_API_KEY` - API key for Arc Core
 - `ARC_LOG_LEVEL` - Logging level (default: INFO)
 
-## Metrics
+### Performance Characteristics
 
-Arc Runtime exposes Prometheus metrics at http://localhost:9090/metrics:
-
-- `arc_requests_intercepted_total` - Total requests intercepted
-- `arc_fixes_applied_total` - Total fixes applied
-- `arc_pattern_matches_total` - Total pattern matches
-- `arc_interception_latency_ms` - Interception overhead histogram
-
-## Custom Patterns
-
-Register custom patterns and fixes:
-
-```python
-arc = Arc()
-
-# Register a pattern
-arc.register_pattern(
-    pattern={"model": "gpt-4", "temperature": {">": 0.9}},
-    fix={"temperature": 0.7}
-)
-```
-
-## Multi-Agent Pipelines
-
-Track complex multi-agent workflows with automatic context propagation:
-
-```python
-from runtime import Arc
-import openai
-
-arc = Arc()
-client = openai.OpenAI()
-
-# Track a loan underwriting pipeline
-with arc.create_multiagent_context(application_id="LOAN-2024-001") as ctx:
-    # Loan officer agent
-    response1 = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": "Analyze loan application"}],
-        extra_headers={"X-Agent-Name": "loan_officer"}
-    )
-    
-    # Credit analyst agent
-    response2 = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": "Review credit history"}],
-        extra_headers={"X-Agent-Name": "credit_analyst"}
-    )
-    
-    # Track context handoffs between agents
-    ctx.add_context_handoff(
-        from_agent="loan_officer",
-        to_agent="credit_analyst",
-        context={"loan_amount": 250000, "initial_assessment": "positive"}
-    )
-    
-    # Get pipeline summary
-    summary = ctx.get_pipeline_summary()
-    print(f"Agents executed: {summary['agents_executed']}")
-    print(f"Total latency: {summary['total_latency_ms']}ms")
-```
-
-### LangGraph Integration
-
-Automatically track LangGraph workflows:
-
-```python
-from runtime import ArcStateGraph
-
-# Use ArcStateGraph instead of StateGraph
-workflow = ArcStateGraph()
-
-# Nodes are automatically tracked
-workflow.add_node("process_application", process_application_fn)
-workflow.add_node("verify_documents", verify_documents_fn)
-
-# Compile and run - Arc tracks everything
-app = workflow.compile()
-result = app.invoke({"application_id": "APP-123"})
-```
-
-## Manual Wrapping
-
-If auto-patching fails, you can explicitly wrap clients:
-
-```python
-import openai
-from runtime import Arc
-
-arc = Arc()
-client = openai.OpenAI()
-protected_client = arc.wrap(client)
-```
-
-## Default Pattern Fixes
-
-Arc Runtime ships with a built-in pattern for preventing high-temperature hallucinations:
-
-| Pattern | Fix | Rationale |
-|---------|-----|-----------|
-| GPT-4.1 with temperature > 0.9 | Set temperature to 0.7 | Reduces hallucination risk while maintaining creativity |
-
-
-### Testing
-
-```bash
-# Set your OpenAI API key
-export OPENAI_API_KEY="sk-..."
-
-# Run real API tests
-python tests/test_real_api.py
-```
-
-## Components
-
-- **Interceptors**: Provider-specific hooks (OpenAI, MCP, Anthropic planned)
-- **Pattern Registry**: Thread-safe pattern storage and matching
-- **Multi-Agent Context**: Pipeline execution tracking with context handoffs
-- **MCP Interceptor**: Model Context Protocol monitoring
-- **LangGraph Integration**: Automatic workflow tracking
-- **Telemetry Client**: OpenTelemetry-compatible async streaming with agent tracing
-- **Metrics Server**: Prometheus-compatible metrics endpoint
-
-## Performance
-
-Verified performance characteristics:
 - **P99 Interception Overhead**: 0.011ms (requirement: <5ms)
-- **Pattern Matching**: <1ms for dictionary lookup
+- **Pattern Matching**: O(1) dictionary lookup
 - **Memory Footprint**: <50MB base
 - **Thread Safety**: Full concurrent request support
 
-## Troubleshooting
+### Metrics & Monitoring
 
-### Arc Runtime is not intercepting calls
+Arc Runtime exposes Prometheus metrics at `http://localhost:9090/metrics`:
 
-1. Ensure Arc is imported before the LLM library:
+```
+arc_requests_intercepted_total     # Total requests intercepted
+arc_fixes_applied_total           # Total fixes applied
+arc_pattern_matches_total         # Total pattern matches
+arc_interception_latency_ms       # Interception overhead histogram
+```
+
+---
+
+## 🏗️ Development Workflows
+
+### Local Development
+
+```bash
+# Setup
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+pytest --cov=runtime --cov-report=html
+
+# Code quality
+black runtime tests
+isort runtime tests
+flake8 runtime tests
+mypy runtime
+```
+
+### Release Process
+
+```bash
+# Update version in pyproject.toml
+# Update CHANGELOG.md
+# Run full test suite
+pytest
+
+# Build and publish
+python -m build
+twine upload dist/*
+```
+
+### Working with Arc Core
+
+Arc Runtime connects to Arc Core via Kong Gateway:
+
+1. **Development**: `grpc://localhost:50051` (direct Arc Core)
+2. **Production**: `grpc://kong.arc.computer:9080` (via Kong)
+
+Kong provides:
+- Customer API key authentication
+- Rate limiting per customer
+- Multi-tenancy isolation
+- Load balancing
+
+---
+
+## 🔍 Troubleshooting
+
+### Arc Runtime not intercepting calls
+
+**Symptoms**: LLM calls bypass Arc, no telemetry generated
+
+**Solutions**:
+1. Import Arc before LLM library:
    ```python
    from runtime import Arc  # Import Arc first
    Arc()
    import openai  # Then import OpenAI
    ```
 
-2. Check if Arc is disabled:
+2. Check if disabled:
    ```bash
    echo $ARC_DISABLE  # Should be empty or "0"
    ```
@@ -309,15 +301,64 @@ Verified performance characteristics:
 
 ### Telemetry not streaming
 
+**Symptoms**: No data in Arc Core dashboard
+
+**Solutions**:
 1. Check endpoint connectivity:
    ```bash
-   telnet your-arc-endpoint 50051
+   telnet kong.arc.computer 9080
    ```
 
-2. Verify gRPC is installed:
+2. Verify gRPC dependencies:
    ```bash
-   pip install grpcio
+   pip install grpcio protobuf
    ```
+
+3. Check API key:
+   ```bash
+   echo $ARC_API_KEY  # Should start with "arc_live_"
+   ```
+
+### Pattern matching not working
+
+**Symptoms**: Known failure patterns not being fixed
+
+**Solutions**:
+1. Check pattern registry:
+   ```python
+   arc = Arc()
+   print(arc.get_registered_patterns())
+   ```
+
+2. Verify pattern syntax:
+   ```python
+   # Correct
+   {"model": "gpt-4.1", "temperature": {">": 0.9}}
+   
+   # Incorrect
+   {"model": "gpt-4.1", "temperature": 0.9}  # Missing operator
+   ```
+
+---
+
+## 📚 Additional Resources
+
+### Team Documentation
+- [Architecture Decision Records](docs/adr/)
+- [Performance Benchmarks](docs/performance_report.md)
+- [Testing Strategy](docs/testing.md)
+
+### Customer Resources
+- [Integration Guide](docs/integration.md)
+- [API Reference](docs/api.md)
+- [FAQ](docs/faq.md)
+
+### Examples
+- [Basic Integration](examples/basic_integration.py)
+- [Multi-Agent Pipeline](examples/langgraph_workflow.py)
+- [Custom Patterns](examples/custom_patterns.py)
+
+---
 
 ## License
 
