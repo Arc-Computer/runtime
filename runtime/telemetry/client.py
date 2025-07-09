@@ -305,6 +305,15 @@ class TelemetryClient(OTelTelemetryClient):
             pb_event.llm_interaction.completion_tokens = int(
                 llm.get("completion_tokens", 0)
             )
+            
+            # ADDED: Missing token and response fields from OTel spans
+            pb_event.llm_interaction.total_tokens = int(llm.get("total_tokens", 0))
+            pb_event.llm_interaction.response_id = str(llm.get("response_id", ""))
+            pb_event.llm_interaction.response_model = str(llm.get("response_model", ""))
+            pb_event.llm_interaction.finish_reason = str(llm.get("finish_reason", ""))
+            pb_event.llm_interaction.user_input = str(llm.get("user_input", ""))
+            pb_event.llm_interaction.agent_output = str(llm.get("agent_output", ""))
+            pb_event.llm_interaction.tool_calls = json.dumps(llm.get("tool_calls", []))
 
         # Set Arc intervention details
         if event.get("pattern_matched") or event.get("fix_applied"):
@@ -317,6 +326,36 @@ class TelemetryClient(OTelTelemetryClient):
             pb_event.arc_intervention.interception_latency_ms = float(
                 event.get("interception_latency_ms", 0.0)
             )
+
+        # ADDED: Agent telemetry data
+        if "agent_telemetry" in event:
+            agent = event["agent_telemetry"]
+            pb_event.agent_telemetry.agent_type = str(agent.get("agent_type", ""))
+            pb_event.agent_telemetry.reasoning_trace = str(agent.get("reasoning_trace", ""))
+            pb_event.agent_telemetry.trajectory = json.dumps(agent.get("trajectory", []))
+            pb_event.agent_telemetry.operation = str(agent.get("operation", ""))
+
+        # ADDED: MCP telemetry data
+        if "mcp_telemetry" in event:
+            mcp = event["mcp_telemetry"]
+            pb_event.mcp_telemetry.endpoint = str(mcp.get("endpoint", ""))
+            pb_event.mcp_telemetry.method = str(mcp.get("method", ""))
+            pb_event.mcp_telemetry.operation = str(mcp.get("operation", ""))
+            pb_event.mcp_telemetry.protocol_version = str(mcp.get("protocol_version", ""))
+            pb_event.mcp_telemetry.request_data = json.dumps(mcp.get("request_data", {}))
+            pb_event.mcp_telemetry.response_data = json.dumps(mcp.get("response_data", {}))
+            pb_event.mcp_telemetry.status_code = int(mcp.get("status_code", 0))
+            pb_event.mcp_telemetry.latency_ms = float(mcp.get("latency_ms", 0.0))
+
+        # ADDED: Pipeline telemetry data
+        if "pipeline_telemetry" in event:
+            pipeline = event["pipeline_telemetry"]
+            pb_event.pipeline_telemetry.phase = str(pipeline.get("phase", ""))
+            pb_event.pipeline_telemetry.from_agent = str(pipeline.get("from_agent", ""))
+            pb_event.pipeline_telemetry.to_agent = str(pipeline.get("to_agent", ""))
+            pb_event.pipeline_telemetry.context_data = json.dumps(pipeline.get("context_data", {}))
+            pb_event.pipeline_telemetry.failure_type = str(pipeline.get("failure_type", ""))
+            pb_event.pipeline_telemetry.business_impact = str(pipeline.get("business_impact", ""))
 
         # Set error info if present
         if "error_info" in event:

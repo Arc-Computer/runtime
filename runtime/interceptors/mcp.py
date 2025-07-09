@@ -155,6 +155,48 @@ class MCPInterceptor(BaseInterceptor):
             "request_id": headers.get("X-Request-ID"),
         }
 
+    def _record_mcp_telemetry(
+        self,
+        mcp_metadata: Dict[str, Any],
+        pipeline_id: str,
+        ctx: Optional[Dict[str, Any]],
+        url: str,
+        method: str,
+        request_data: Optional[Dict[str, Any]],
+        response_data: Optional[Dict[str, Any]],
+        status_code: int,
+        latency_ms: float,
+    ):
+        """Record MCP event for protobuf telemetry"""
+        if not self.telemetry_client:
+            return
+            
+        self.telemetry_client.record({
+            "timestamp": time.time(),
+            "request_id": mcp_metadata.get("request_id", ""),
+            "pipeline_id": pipeline_id or "",
+            "application_id": ctx.get("application_id", "") if ctx else "",
+            "agent_name": mcp_metadata.get("agent_name", ""),
+            "mcp_telemetry": {
+                "endpoint": str(url),
+                "method": method,
+                "operation": mcp_metadata["mcp_operation"],
+                "protocol_version": mcp_metadata.get("mcp_protocol_version", "1.0"),
+                "request_data": request_data or {},
+                "response_data": response_data or {},
+                "status_code": status_code,
+                "latency_ms": latency_ms,
+            },
+            "agent_telemetry": {
+                "agent_type": "mcp_server",
+                "operation": mcp_metadata["mcp_operation"],
+            },
+            "metadata": {
+                "mcp_endpoint": str(url),
+                "success": str(status_code == 200),
+            },
+        })
+
     def _intercept_sync_mcp_request(
         self,
         original_func: Callable,
@@ -221,6 +263,19 @@ class MCPInterceptor(BaseInterceptor):
             if self.telemetry_client and span:
                 self.telemetry_client.record_mcp_response(
                     span, response_data, latency_ms, status_code=response.status_code
+                )
+                
+                # Record MCP event for protobuf telemetry
+                self._record_mcp_telemetry(
+                    mcp_metadata=mcp_metadata,
+                    pipeline_id=pipeline_id,
+                    ctx=ctx,
+                    url=url,
+                    method=method,
+                    request_data=request_data,
+                    response_data=response_data,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
                 )
 
             # Update pipeline context
@@ -324,6 +379,19 @@ class MCPInterceptor(BaseInterceptor):
             if self.telemetry_client and span:
                 self.telemetry_client.record_mcp_response(
                     span, response_data, latency_ms, status_code=response.status_code
+                )
+                
+                # Record MCP event for protobuf telemetry
+                self._record_mcp_telemetry(
+                    mcp_metadata=mcp_metadata,
+                    pipeline_id=pipeline_id,
+                    ctx=ctx,
+                    url=url,
+                    method=method,
+                    request_data=request_data,
+                    response_data=response_data,
+                    status_code=response.status_code,
+                    latency_ms=latency_ms,
                 )
 
             # Update pipeline context
