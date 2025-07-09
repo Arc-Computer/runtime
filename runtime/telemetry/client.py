@@ -6,11 +6,13 @@ import json
 import logging
 import os
 import queue
+import random
 import threading
 import time
 from typing import Any, Dict, Generator, Optional
 from urllib.parse import urlparse
 
+from runtime.config import TelemetryConfig
 from runtime.telemetry.metrics import Metrics
 from runtime.telemetry.otel_client import OTelTelemetryClient
 
@@ -28,12 +30,20 @@ class TelemetryClient(OTelTelemetryClient):
     - Local metrics collection
     """
 
-    def __init__(self, endpoint: str, api_key: Optional[str] = None):
+    def __init__(self, endpoint: str = None, api_key: Optional[str] = None, config: Optional[TelemetryConfig] = None):
         # Initialize OTel parent
         super().__init__(service_name="arc-runtime")
 
-        self.endpoint = endpoint
-        self.api_key = api_key
+        # Support both old and new constructor patterns
+        if config is not None:
+            self.config = config
+        else:
+            # Backward compatibility: create config from parameters
+            self.config = TelemetryConfig(
+                endpoint=endpoint or "localhost:50051",
+                api_key=api_key
+            )
+
         self.metrics = Metrics()
 
         # Queue for async telemetry
@@ -51,7 +61,7 @@ class TelemetryClient(OTelTelemetryClient):
 
     def _parse_endpoint(self):
         """Parse gRPC endpoint"""
-        parsed = urlparse(self.endpoint)
+        parsed = urlparse(self.config.endpoint)
 
         # Default to localhost if no host specified
         self.host = parsed.hostname or "localhost"
@@ -113,7 +123,7 @@ class TelemetryClient(OTelTelemetryClient):
 
     def _worker_loop(self):
         """Main worker loop for processing telemetry"""
-        logger.debug(f"Telemetry worker started (endpoint={self.endpoint})")
+        logger.debug(f"Telemetry worker started (endpoint={self.config.endpoint})")
 
         # Initialize gRPC channel if available
         channel = None
@@ -151,7 +161,7 @@ class TelemetryClient(OTelTelemetryClient):
                 )
 
                 if should_flush and batch:
-                    self._send_batch(batch, stub)
+                    self._send_batch_with_retry(batch, stub)
                     batch = []
                     last_flush = time.time()
 
@@ -161,29 +171,44 @@ class TelemetryClient(OTelTelemetryClient):
 
         # Final flush
         if batch:
-            self._send_batch(batch, stub)
+            self._send_batch_with_retry(batch, stub)
 
         # Close gRPC channel
         if channel:
             channel.close()
 
     def _create_grpc_connection(self):
-        """Create gRPC channel and stub"""
+        """Create gRPC channel and stub with Kong Konnect support"""
         import grpc
 
         from runtime.proto import telemetry_pb2_grpc
 
-        # Create insecure channel for development
-        # TODO: Add TLS support for production
-        channel = grpc.insecure_channel(
-            f"{self.host}:{self.port}",
-            options=[
-                ("grpc.keepalive_time_ms", 30000),
-                ("grpc.keepalive_timeout_ms", 10000),
-                ("grpc.keepalive_permit_without_calls", True),
-                ("grpc.http2.max_ping_strikes", 0),
-            ],
-        )
+        # Determine endpoint and TLS settings based on configuration
+        if self.config.use_kong_gateway and self.config.kong_gateway_url:
+            endpoint = self.config.kong_gateway_url
+            # Extract host and port from Kong gateway URL
+            from urllib.parse import urlparse
+            parsed = urlparse(endpoint)
+            target = f"{parsed.hostname}:{parsed.port or (443 if parsed.scheme == 'https' else 80)}"
+            use_tls = self.config.use_tls or endpoint.startswith('https://')
+        else:
+            target = f"{self.host}:{self.port}"
+            use_tls = self.config.use_tls
+
+        # gRPC channel options
+        options = [
+            ("grpc.keepalive_time_ms", 30000),
+            ("grpc.keepalive_timeout_ms", 10000),
+            ("grpc.keepalive_permit_without_calls", True),
+            ("grpc.http2.max_ping_strikes", 0),
+        ]
+
+        # Create appropriate channel (secure vs insecure)
+        if use_tls:
+            credentials = grpc.ssl_channel_credentials()
+            channel = grpc.secure_channel(target, credentials, options=options)
+        else:
+            channel = grpc.insecure_channel(target, options=options)
 
         # Create stub from generated code
         stub = telemetry_pb2_grpc.TelemetryServiceStub(channel)
@@ -263,6 +288,25 @@ class TelemetryClient(OTelTelemetryClient):
                 logger.error(f"Error converting event to protobuf: {e}")
                 self.metrics.increment("arc_telemetry_conversion_errors_total")
 
+    def _send_batch_with_retry(self, batch: list, stub: Any, max_retries: int = 3):
+        """Send batch with exponential backoff retry for Kong Konnect reliability"""
+        for attempt in range(max_retries + 1):
+            try:
+                return self._send_batch(batch, stub)
+            except Exception as e:
+                if attempt == max_retries:
+                    raise
+                
+                # Only retry on specific gRPC errors
+                if hasattr(e, 'code'):
+                    import grpc
+                    if e.code() not in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED]:
+                        raise
+                
+                wait_time = (2 ** attempt) + random.uniform(0, 1)
+                logger.debug(f"Retrying batch send in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+
     def _send_batch(self, batch: list, stub: Any):
         """Send a batch of events using streaming RPC"""
         if not batch:
@@ -274,8 +318,8 @@ class TelemetryClient(OTelTelemetryClient):
 
                 # Add authentication metadata
                 metadata = []
-                if self.api_key:
-                    metadata.append(("x-api-key", self.api_key))
+                if self.config.api_key:
+                    metadata.append(("x-api-key", self.config.api_key))
 
                 # Send events via streaming RPC
                 try:
@@ -294,9 +338,13 @@ class TelemetryClient(OTelTelemetryClient):
 
                 except grpc.RpcError as e:
                     if e.code() == grpc.StatusCode.UNAUTHENTICATED:
-                        logger.error("Authentication failed. Check your API key.")
+                        logger.error("Authentication failed. Check your API key and Kong Konnect configuration.")
                     elif e.code() == grpc.StatusCode.UNAVAILABLE:
-                        logger.debug("Arc Core server unavailable")
+                        logger.debug("Arc Core server unavailable - check Kong Konnect gateway and upstream connectivity")
+                    elif e.code() == grpc.StatusCode.PERMISSION_DENIED:
+                        logger.error("Permission denied. Verify API key has correct permissions in Kong Konnect.")
+                    elif e.code() == grpc.StatusCode.NOT_FOUND:
+                        logger.error("Service not found. Check Kong Konnect route configuration.")
                     else:
                         logger.debug(f"gRPC error: {e.code()}: {e.details()}")
                     self.metrics.increment("arc_telemetry_failed_total", len(batch))
@@ -308,6 +356,35 @@ class TelemetryClient(OTelTelemetryClient):
         except Exception as e:
             logger.debug(f"Failed to send telemetry batch: {e}")
             self.metrics.increment("arc_telemetry_failed_total", len(batch))
+
+    def check_connectivity(self) -> bool:
+        """Check Kong Konnect connectivity health"""
+        if not self.grpc_available:
+            logger.warning("gRPC not available - cannot check connectivity")
+            return False
+        
+        try:
+            import grpc
+            
+            # Create a temporary channel for health check
+            channel, stub = self._create_grpc_connection()
+            
+            # Try to establish connection with a short timeout
+            try:
+                # Use gRPC's built-in channel connectivity check
+                state = channel.get_state(try_to_connect=True)
+                if state == grpc.ChannelConnectivity.READY:
+                    logger.info("Kong Konnect connectivity check: HEALTHY")
+                    return True
+                else:
+                    logger.warning(f"Kong Konnect connectivity check: UNHEALTHY (state: {state})")
+                    return False
+            finally:
+                channel.close()
+                
+        except Exception as e:
+            logger.error(f"Kong Konnect connectivity check failed: {e}")
+            return False
 
     def shutdown(self):
         """Shutdown the telemetry client"""
