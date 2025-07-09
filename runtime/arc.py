@@ -8,7 +8,7 @@ import sys
 import threading
 from typing import Optional
 
-from runtime.config import Config
+from runtime.config import Config, TelemetryConfig
 from runtime.interceptors.mcp import MCPInterceptor
 from runtime.interceptors.openai import OpenAIInterceptor
 from runtime.multiagent.context import MultiAgentContext
@@ -46,6 +46,7 @@ class Arc:
         api_key: Optional[str] = None,
         cache_dir: Optional[str] = None,
         log_level: Optional[str] = None,
+        telemetry_config: Optional[TelemetryConfig] = None,
     ):
         # Skip re-initialization for singleton
         if hasattr(self, "_initialized"):
@@ -61,10 +62,15 @@ class Arc:
 
         # Initialize components
         self.pattern_registry = PatternRegistry()
-        self.telemetry_client = TelemetryClient(
-            endpoint=self.config.endpoint,
-            api_key=self.config.api_key,
-        )
+        
+        # Create telemetry client with config support
+        if telemetry_config:
+            self.telemetry_client = TelemetryClient(config=telemetry_config)
+        else:
+            self.telemetry_client = TelemetryClient(
+                endpoint=self.config.endpoint,
+                api_key=self.config.api_key,
+            )
 
         # Initialize interceptors
         self.interceptors = {

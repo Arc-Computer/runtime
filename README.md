@@ -208,6 +208,50 @@ arc = Arc(
 - `ARC_API_KEY` - API key for Arc Core
 - `ARC_LOG_LEVEL` - Logging level (default: INFO)
 
+**Kong Konnect Environment Variables:**
+- `ARC_TELEMETRY_ENDPOINT` - Kong gateway endpoint
+- `ARC_USE_KONG_GATEWAY=true` - Enable Kong Konnect mode
+- `ARC_KONG_GATEWAY_URL` - Kong gateway URL (e.g., https://your-gateway.konghq.com)
+- `ARC_USE_TLS=true` - Enable TLS/SSL for gateway connections
+
+### Kong Konnect Integration
+
+Arc Runtime supports Kong Konnect cloud gateway for enterprise deployments:
+
+```python
+from runtime import Arc
+from runtime.config import TelemetryConfig
+
+# Direct configuration
+config = TelemetryConfig(
+    endpoint="your-gateway-id.us.cp0.konghq.com:443",
+    api_key="arc_live_your_key",
+    use_kong_gateway=True,
+    kong_gateway_url="https://your-gateway-id.us.cp0.konghq.com",
+    use_tls=True
+)
+
+arc = Arc(telemetry_config=config)
+
+# Or use environment variables
+# export ARC_TELEMETRY_ENDPOINT="your-gateway-id.us.cp0.konghq.com:443"
+# export ARC_API_KEY="arc_live_your_key"
+# export ARC_USE_KONG_GATEWAY=true
+# export ARC_KONG_GATEWAY_URL="https://your-gateway-id.us.cp0.konghq.com"
+# export ARC_USE_TLS=true
+
+config = TelemetryConfig.from_env()
+arc = Arc(telemetry_config=config)
+```
+
+**Kong Konnect Features:**
+- API key authentication and rate limiting
+- TLS/SSL encryption for secure connections
+- Retry logic with exponential backoff
+- Enhanced error handling with Kong-specific guidance
+- Multi-tenancy isolation
+- Load balancing and high availability
+
 ### Performance Characteristics
 
 - **P99 Interception Overhead**: 0.011ms (requirement: <5ms)
@@ -306,6 +350,10 @@ Kong provides:
 **Solutions**:
 1. Check endpoint connectivity:
    ```bash
+   # For Kong Konnect
+   telnet your-gateway-id.us.cp0.konghq.com 443
+   
+   # For direct connection
    telnet kong.arc.computer 9080
    ```
 
@@ -317,6 +365,17 @@ Kong provides:
 3. Check API key:
    ```bash
    echo $ARC_API_KEY  # Should start with "arc_live_"
+   ```
+
+4. Kong Konnect specific troubleshooting:
+   ```bash
+   # Check Kong gateway configuration
+   echo $ARC_USE_KONG_GATEWAY
+   echo $ARC_KONG_GATEWAY_URL
+   echo $ARC_USE_TLS
+   
+   # Test TLS connection
+   openssl s_client -connect your-gateway-id.us.cp0.konghq.com:443
    ```
 
 ### Pattern matching not working

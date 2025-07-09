@@ -5,6 +5,26 @@ All notable changes to Arc Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-01-08
+
+### Added
+- Kong Konnect cloud gateway support with enhanced configuration
+- New `TelemetryConfig` class with Kong Konnect parameters
+- TLS/SSL support for secure gateway connections
+- Retry logic with exponential backoff for improved reliability
+- Environment variable support for configuration
+- Kong Konnect-specific error messages and troubleshooting guidance
+
+### Changed
+- Updated protobuf version constraint to `>=3.20.0,<7.0.0` for compatibility with `grpcio-tools>=1.73.1`
+- Enhanced gRPC error handling with Kong-specific guidance
+- Improved telemetry client constructor to accept configuration objects
+- Updated gRPC connection creation to support both direct and gateway connections
+
+### Fixed
+- Resolved protobuf version conflicts with modern gRPC tools
+- Enhanced error handling for authentication and connectivity issues
+
 ## [0.1.4] - 2025-01-08
 
 ### Fixed
