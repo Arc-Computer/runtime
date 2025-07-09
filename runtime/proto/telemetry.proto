@@ -28,6 +28,19 @@ message TelemetryEvent {
     float latency_ms = 5;
     int32 prompt_tokens = 6;
     int32 completion_tokens = 7;
+    
+    // ADDED: Missing token count
+    int32 total_tokens = 8;
+    
+    // ADDED: Response details captured in OTel spans
+    string response_id = 9;
+    string response_model = 10;
+    string finish_reason = 11;
+    string user_input = 12;
+    string agent_output = 13;
+    
+    // ADDED: Tool calls (JSON array)
+    string tool_calls = 14;
   }
   LLMInteraction llm_interaction = 6;
 
@@ -45,7 +58,40 @@ message TelemetryEvent {
   }
   optional ErrorInfo error = 8;
 
-  map<string, string> metadata = 9;
+  // ADDED: Agent telemetry data
+  message AgentTelemetry {
+    string agent_type = 1;  // llm, mcp_server, tool
+    string reasoning_trace = 2;
+    string trajectory = 3;  // JSON array of agent actions
+    string operation = 4;   // For MCP: tool_call, resource_read, etc.
+  }
+  optional AgentTelemetry agent_telemetry = 9;
+
+  // ADDED: MCP-specific telemetry
+  message MCPTelemetry {
+    string endpoint = 1;
+    string method = 2;
+    string operation = 3;  // tool_call, resource_read, prompt_get, sampling
+    string protocol_version = 4;
+    string request_data = 5;   // JSON request body
+    string response_data = 6;  // JSON response body
+    int32 status_code = 7;
+    float latency_ms = 8;
+  }
+  optional MCPTelemetry mcp_telemetry = 10;
+
+  // ADDED: Multi-agent pipeline data
+  message PipelineTelemetry {
+    string phase = 1;  // start, agent_execution, context_handoff, completion
+    string from_agent = 2;
+    string to_agent = 3;
+    string context_data = 4;  // JSON context passed between agents
+    string failure_type = 5;
+    string business_impact = 6;
+  }
+  optional PipelineTelemetry pipeline_telemetry = 11;
+
+  map<string, string> metadata = 12;
 }
 
 message StreamTelemetryResponse {

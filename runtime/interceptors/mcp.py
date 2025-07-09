@@ -222,6 +222,33 @@ class MCPInterceptor(BaseInterceptor):
                 self.telemetry_client.record_mcp_response(
                     span, response_data, latency_ms, status_code=response.status_code
                 )
+                
+                # Record MCP event for protobuf telemetry (reuses existing variables)
+                self.telemetry_client.record({
+                    "timestamp": time.time(),
+                    "request_id": mcp_metadata.get("request_id", ""),
+                    "pipeline_id": pipeline_id or "",
+                    "application_id": ctx.get("application_id", "") if ctx else "",
+                    "agent_name": mcp_metadata.get("agent_name", ""),
+                    "mcp_telemetry": {
+                        "endpoint": str(url),
+                        "method": method,
+                        "operation": mcp_metadata["mcp_operation"],
+                        "protocol_version": mcp_metadata.get("mcp_protocol_version", "1.0"),
+                        "request_data": request_data or {},
+                        "response_data": response_data or {},
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    },
+                    "agent_telemetry": {
+                        "agent_type": "mcp_server",
+                        "operation": mcp_metadata["mcp_operation"],
+                    },
+                    "metadata": {
+                        "mcp_endpoint": str(url),
+                        "success": str(response.status_code == 200),
+                    },
+                })
 
             # Update pipeline context
             if ctx and mcp_metadata.get("agent_name"):
@@ -325,6 +352,33 @@ class MCPInterceptor(BaseInterceptor):
                 self.telemetry_client.record_mcp_response(
                     span, response_data, latency_ms, status_code=response.status_code
                 )
+                
+                # Record MCP event for protobuf telemetry (reuses existing variables)
+                self.telemetry_client.record({
+                    "timestamp": time.time(),
+                    "request_id": mcp_metadata.get("request_id", ""),
+                    "pipeline_id": pipeline_id or "",
+                    "application_id": ctx.get("application_id", "") if ctx else "",
+                    "agent_name": mcp_metadata.get("agent_name", ""),
+                    "mcp_telemetry": {
+                        "endpoint": str(url),
+                        "method": method,
+                        "operation": mcp_metadata["mcp_operation"],
+                        "protocol_version": mcp_metadata.get("mcp_protocol_version", "1.0"),
+                        "request_data": request_data or {},
+                        "response_data": response_data or {},
+                        "status_code": response.status_code,
+                        "latency_ms": latency_ms,
+                    },
+                    "agent_telemetry": {
+                        "agent_type": "mcp_server",
+                        "operation": mcp_metadata["mcp_operation"],
+                    },
+                    "metadata": {
+                        "mcp_endpoint": str(url),
+                        "success": str(response.status_code == 200),
+                    },
+                })
 
             # Update pipeline context
             if ctx and mcp_metadata.get("agent_name"):

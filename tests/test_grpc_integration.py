@@ -31,6 +31,13 @@ class TestGRPCIntegration(unittest.TestCase):
                 "latency_ms": 150.5,
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
+                "total_tokens": 15,
+                "response_id": "test-response-id",
+                "response_model": "gpt-4",
+                "finish_reason": "stop",
+                "user_input": "Hello",
+                "agent_output": "Hi!",
+                "tool_calls": [],
             },
             "pattern_matched": True,
             "fix_applied": {"temperature": 0.7},
@@ -49,7 +56,59 @@ class TestGRPCIntegration(unittest.TestCase):
             self.assertEqual(pb_event.llm_interaction.model, "gpt-4")
             self.assertEqual(pb_event.llm_interaction.latency_ms, 150.5)
             self.assertTrue(pb_event.arc_intervention.pattern_matched)
-            # Note: total_tokens is not in the proto anymore
+            # Test enhanced LLM interaction fields
+            self.assertEqual(pb_event.llm_interaction.total_tokens, 15)  # 10 + 5
+            self.assertEqual(pb_event.llm_interaction.prompt_tokens, 10)
+            self.assertEqual(pb_event.llm_interaction.completion_tokens, 5)
+        except ImportError:
+            # Skip if proto not available
+            pass
+
+        # Cleanup
+        client.shutdown()
+
+    def test_mcp_telemetry_conversion(self):
+        """Test conversion of MCP telemetry event to protobuf"""
+        client = TelemetryClient(endpoint="grpc://localhost:50051")
+
+        # Create test MCP event
+        event = {
+            "timestamp": time.time(),
+            "request_id": "mcp-request-456",
+            "pipeline_id": "pipeline-789",
+            "application_id": "app-123",
+            "agent_name": "mcp-agent",
+            "mcp_telemetry": {
+                "endpoint": "http://localhost:3000/mcp/tools/call",
+                "method": "POST",
+                "operation": "tool_call",
+                "protocol_version": "1.0",
+                "request_data": {"tool": "calculator", "args": {"a": 1, "b": 2}},
+                "response_data": {"result": 3},
+                "status_code": 200,
+                "latency_ms": 45.5,
+            },
+            "agent_telemetry": {
+                "agent_type": "mcp_server",
+                "operation": "tool_call",
+            },
+            "metadata": {
+                "mcp_endpoint": "http://localhost:3000/mcp/tools/call",
+                "success": "true",
+            },
+        }
+
+        # Test conversion (if proto is available)
+        try:
+            pb_event = client._convert_to_protobuf(event)
+            self.assertEqual(pb_event.request_id, "mcp-request-456")
+            self.assertEqual(pb_event.pipeline_id, "pipeline-789")
+            self.assertEqual(pb_event.agent_name, "mcp-agent")
+            self.assertEqual(pb_event.mcp_telemetry.endpoint, "http://localhost:3000/mcp/tools/call")
+            self.assertEqual(pb_event.mcp_telemetry.operation, "tool_call")
+            self.assertEqual(pb_event.mcp_telemetry.status_code, 200)
+            self.assertEqual(pb_event.mcp_telemetry.latency_ms, 45.5)
+            self.assertEqual(pb_event.agent_telemetry.agent_type, "mcp_server")
         except ImportError:
             # Skip if proto not available
             pass

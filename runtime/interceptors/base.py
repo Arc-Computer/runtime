@@ -161,6 +161,7 @@ class BaseInterceptor(ABC):
                     fix_applied=fix_applied,
                     latency_ms=latency_ms,
                     success=True,
+                    response=response,
                 )
 
                 return response
@@ -189,6 +190,7 @@ class BaseInterceptor(ABC):
                     latency_ms=latency_ms,
                     success=False,
                     error=str(e),
+                    response=None,
                 )
 
                 raise
@@ -219,13 +221,84 @@ class BaseInterceptor(ABC):
         latency_ms: float,
         success: bool,
         error: Optional[str] = None,
+        response: Any = None,
     ):
         """Log telemetry event in the format expected by Arc Core gRPC"""
         # Get pipeline context
         ctx = pipeline_context.get()
         pipeline_id = get_current_pipeline_id()
 
-        # Build event matching the protobuf structure
+        # Extract response data if available
+        response_data = {}
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+        response_id = ""
+        response_model = ""
+        finish_reason = ""
+        user_input = ""
+        agent_output = ""
+        tool_calls = []
+
+        if response and success:
+            # Extract response fields that are captured in OTel spans
+            if hasattr(response, "id"):
+                response_id = response.id
+            if hasattr(response, "model"):
+                response_model = response.model
+            
+            # Extract token usage
+            if hasattr(response, "usage"):
+                usage = response.usage
+                if hasattr(usage, "prompt_tokens"):
+                    prompt_tokens = usage.prompt_tokens
+                if hasattr(usage, "completion_tokens"):
+                    completion_tokens = usage.completion_tokens
+                if hasattr(usage, "total_tokens"):
+                    total_tokens = usage.total_tokens
+
+            # Extract completion details
+            if hasattr(response, "choices") and response.choices:
+                choice = response.choices[0]
+                if hasattr(choice, "finish_reason"):
+                    finish_reason = choice.finish_reason
+
+                # Extract agent output
+                if hasattr(choice, "message") and hasattr(choice.message, "content"):
+                    agent_output = choice.message.content[:500]  # Truncate for size
+
+                # Extract tool calls
+                if hasattr(choice.message, "tool_calls") and choice.message.tool_calls:
+                    tool_calls = [
+                        {
+                            "id": tc.id,
+                            "type": tc.type,
+                            "function": (
+                                {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments[:200],
+                                }
+                                if hasattr(tc, "function")
+                                else None
+                            ),
+                        }
+                        for tc in choice.message.tool_calls
+                    ]
+
+            # Build response body
+            response_data = {
+                "id": response_id,
+                "model": response_model,
+                "choices": [{"finish_reason": finish_reason, "message": {"content": agent_output}}] if agent_output else [],
+                "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": total_tokens}
+            }
+
+        # Extract user input from request
+        messages = request_params.get("messages", [])
+        if messages and messages[-1].get("role") == "user":
+            user_input = messages[-1].get("content", "")[:500]
+
+        # Build event matching the enhanced protobuf structure
         event = {
             "timestamp": time.time(),
             "request_id": request_id,
@@ -236,11 +309,17 @@ class BaseInterceptor(ABC):
                 "provider": provider,
                 "model": request_params.get("model", ""),
                 "request_body": request_params,
-                "response_body": {},  # Will be filled by span recording
+                "response_body": response_data,
                 "latency_ms": latency_ms,
-                "prompt_tokens": 0,  # Will be filled by span recording
-                "completion_tokens": 0,  # Will be filled by span recording
-                "total_tokens": 0,  # Will be filled by span recording
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "response_id": response_id,
+                "response_model": response_model,
+                "finish_reason": finish_reason,
+                "user_input": user_input,
+                "agent_output": agent_output,
+                "tool_calls": tool_calls,
             },
             "pattern_matched": pattern_matched,
             "fix_applied": fix_applied,
@@ -255,12 +334,13 @@ class BaseInterceptor(ABC):
 
         # Add error info if present
         if error:
+            import traceback
             event["error_info"] = {
                 "error_type": (
                     type(error).__name__ if hasattr(error, "__class__") else "Unknown"
                 ),
                 "error_message": str(error),
-                "stack_trace": "",  # TODO: Add stack trace if needed
+                "stack_trace": traceback.format_exc()[:2000],  # Truncate for size
             }
 
         self.telemetry_client.record(event)
