@@ -422,7 +422,7 @@ class TelemetryClient(OTelTelemetryClient):
             self.metrics.increment("arc_telemetry_failed_total", len(batch))
 
     def check_connectivity(self) -> bool:
-        """Check Kong Konnect connectivity health"""
+        """Check Kong Konnect connectivity health with actual service verification"""
         if not self.grpc_available:
             logger.warning("gRPC not available - cannot check connectivity")
             return False
@@ -435,14 +435,49 @@ class TelemetryClient(OTelTelemetryClient):
             
             # Try to establish connection with a short timeout
             try:
-                # Use gRPC's built-in channel connectivity check
+                # First check if channel can connect
                 state = channel.get_state(try_to_connect=True)
-                if state == grpc.ChannelConnectivity.READY:
-                    logger.info("Kong Konnect connectivity check: HEALTHY")
-                    return True
-                else:
+                if state != grpc.ChannelConnectivity.READY:
                     logger.warning(f"Kong Konnect connectivity check: UNHEALTHY (state: {state})")
                     return False
+                
+                # Now verify service is actually responding with a test call
+                try:
+                    # Create a minimal test event to verify service health
+                    test_event = {
+                        "request_id": "health_check",
+                        "timestamp": time.time(),
+                        "metadata": {"source": "connectivity_check"}
+                    }
+                    
+                    # Add authentication metadata if available
+                    metadata = []
+                    if self.config.api_key:
+                        metadata.append(("x-api-key", self.config.api_key))
+                    
+                    # Try to send the test event to verify service response
+                    response = stub.StreamTelemetry(
+                        self._event_generator([test_event]), 
+                        metadata=metadata,
+                        timeout=5.0  # 5 second timeout for health check
+                    )
+                    
+                    if response.success:
+                        logger.info("Kong Konnect connectivity check: HEALTHY (service responding)")
+                        return True
+                    else:
+                        logger.warning(f"Kong Konnect connectivity check: UNHEALTHY (service error: {response.message})")
+                        return False
+                        
+                except grpc.RpcError as e:
+                    if e.code() == grpc.StatusCode.UNAUTHENTICATED:
+                        logger.warning("Kong Konnect connectivity check: UNHEALTHY (authentication failed)")
+                    elif e.code() == grpc.StatusCode.UNAVAILABLE:
+                        logger.warning("Kong Konnect connectivity check: UNHEALTHY (service unavailable)")
+                    else:
+                        logger.warning(f"Kong Konnect connectivity check: UNHEALTHY (gRPC error: {e.code()})")
+                    return False
+                    
             finally:
                 channel.close()
                 
