@@ -9,7 +9,7 @@ import queue
 import random
 import threading
 import time
-from typing import Any, Dict, Generator, Optional
+from typing import Any, Dict, Generator, Optional, Tuple
 from urllib.parse import urlparse
 
 from runtime.config import TelemetryConfig
@@ -17,6 +17,10 @@ from runtime.telemetry.metrics import Metrics
 from runtime.telemetry.otel_client import OTelTelemetryClient
 
 logger = logging.getLogger(__name__)
+
+# Constants for retry logic
+DEFAULT_MAX_RETRIES = 3
+MAX_JITTER = 1.0
 
 
 class TelemetryClient(OTelTelemetryClient):
@@ -177,7 +181,7 @@ class TelemetryClient(OTelTelemetryClient):
         if channel:
             channel.close()
 
-    def _create_grpc_connection(self):
+    def _create_grpc_connection(self) -> Tuple[Any, Any]:
         """Create gRPC channel and stub with Kong Konnect support"""
         import grpc
 
@@ -186,10 +190,25 @@ class TelemetryClient(OTelTelemetryClient):
         # Determine endpoint and TLS settings based on configuration
         if self.config.use_kong_gateway and self.config.kong_gateway_url:
             endpoint = self.config.kong_gateway_url
+            
+            # Handle URLs without scheme by defaulting to https
+            if not endpoint.startswith(('http://', 'https://')):
+                endpoint = f"https://{endpoint}"
+            
             # Extract host and port from Kong gateway URL
-            from urllib.parse import urlparse
             parsed = urlparse(endpoint)
-            target = f"{parsed.hostname}:{parsed.port or (443 if parsed.scheme == 'https' else 80)}"
+            if not parsed.hostname:
+                raise ValueError(f"Invalid Kong gateway URL: {endpoint}")
+                
+            # Use explicit port if provided, otherwise use scheme defaults
+            if parsed.port:
+                port = parsed.port
+            elif parsed.scheme == 'https':
+                port = 443
+            else:
+                port = 80
+                
+            target = f"{parsed.hostname}:{port}"
             use_tls = self.config.use_tls or endpoint.startswith('https://')
         else:
             target = f"{self.host}:{self.port}"
@@ -205,7 +224,33 @@ class TelemetryClient(OTelTelemetryClient):
 
         # Create appropriate channel (secure vs insecure)
         if use_tls:
-            credentials = grpc.ssl_channel_credentials()
+            # Create SSL credentials with optional certificate validation
+            if self.config.tls_ca_cert_path or self.config.tls_cert_path or self.config.tls_key_path:
+                # Read certificate files if provided
+                root_certificates = None
+                private_key = None
+                certificate_chain = None
+                
+                if self.config.tls_ca_cert_path:
+                    with open(self.config.tls_ca_cert_path, 'rb') as f:
+                        root_certificates = f.read()
+                
+                if self.config.tls_cert_path:
+                    with open(self.config.tls_cert_path, 'rb') as f:
+                        certificate_chain = f.read()
+                
+                if self.config.tls_key_path:
+                    with open(self.config.tls_key_path, 'rb') as f:
+                        private_key = f.read()
+                
+                credentials = grpc.ssl_channel_credentials(
+                    root_certificates=root_certificates,
+                    private_key=private_key,
+                    certificate_chain=certificate_chain
+                )
+            else:
+                credentials = grpc.ssl_channel_credentials()
+            
             channel = grpc.secure_channel(target, credentials, options=options)
         else:
             channel = grpc.insecure_channel(target, options=options)
@@ -288,8 +333,19 @@ class TelemetryClient(OTelTelemetryClient):
                 logger.error(f"Error converting event to protobuf: {e}")
                 self.metrics.increment("arc_telemetry_conversion_errors_total")
 
-    def _send_batch_with_retry(self, batch: list, stub: Any, max_retries: int = 3):
+    def _send_batch_with_retry(self, batch: list, stub: Any, max_retries: int = DEFAULT_MAX_RETRIES):
         """Send batch with exponential backoff retry for Kong Konnect reliability"""
+        import grpc
+        
+        # Define retryable gRPC status codes
+        retryable_codes = [
+            grpc.StatusCode.UNAVAILABLE,
+            grpc.StatusCode.DEADLINE_EXCEEDED,
+            grpc.StatusCode.RESOURCE_EXHAUSTED,
+            grpc.StatusCode.INTERNAL,
+            grpc.StatusCode.ABORTED
+        ]
+        
         for attempt in range(max_retries + 1):
             try:
                 return self._send_batch(batch, stub)
@@ -298,14 +354,13 @@ class TelemetryClient(OTelTelemetryClient):
                     raise
                 
                 # Only retry on specific gRPC errors
-                if hasattr(e, 'code'):
-                    import grpc
-                    if e.code() not in [grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED]:
-                        raise
-                
-                wait_time = (2 ** attempt) + random.uniform(0, 1)
-                logger.debug(f"Retrying batch send in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})")
-                time.sleep(wait_time)
+                if hasattr(e, 'code') and e.code() in retryable_codes:
+                    wait_time = (2 ** attempt) + random.uniform(0, MAX_JITTER)
+                    logger.debug(f"Retrying batch send in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    # Non-retryable error, re-raise immediately
+                    raise
 
     def _send_batch(self, batch: list, stub: Any):
         """Send a batch of events using streaming RPC"""
