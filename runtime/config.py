@@ -4,7 +4,30 @@ Configuration management for Arc Runtime
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional
+
+
+@dataclass
+class TelemetryConfig:
+    """Configuration class for telemetry client with Kong Konnect support"""
+    
+    endpoint: str = "localhost:50051"
+    api_key: Optional[str] = None
+    use_kong_gateway: bool = False
+    kong_gateway_url: Optional[str] = None
+    use_tls: bool = False
+    
+    @classmethod
+    def from_env(cls) -> 'TelemetryConfig':
+        """Create configuration from environment variables"""
+        return cls(
+            endpoint=os.getenv('ARC_TELEMETRY_ENDPOINT', 'localhost:50051'),
+            api_key=os.getenv('ARC_API_KEY'),
+            use_kong_gateway=os.getenv('ARC_USE_KONG_GATEWAY', 'false').lower() == 'true',
+            kong_gateway_url=os.getenv('ARC_KONG_GATEWAY_URL'),
+            use_tls=os.getenv('ARC_USE_TLS', 'false').lower() == 'true'
+        )
 
 
 class Config:

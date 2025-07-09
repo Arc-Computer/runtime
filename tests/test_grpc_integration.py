@@ -245,6 +245,30 @@ class TestGRPCIntegration(unittest.TestCase):
 
         # Cleanup
         client.shutdown()
+    
+    def test_telemetry_config_integration(self):
+        """Test integration with new TelemetryConfig"""
+        from runtime.config import TelemetryConfig
+        
+        # Create config with Kong Konnect settings
+        config = TelemetryConfig(
+            endpoint="localhost:50051",
+            api_key="test_key",
+            use_kong_gateway=False,  # Use direct connection for test
+            use_tls=False
+        )
+        
+        # Create client with config
+        client = TelemetryClient(config=config)
+        
+        # Verify configuration was applied
+        self.assertEqual(client.endpoint, "localhost:50051")
+        self.assertEqual(client.api_key, "test_key")
+        self.assertFalse(client.config.use_kong_gateway)
+        self.assertFalse(client.config.use_tls)
+        
+        # Cleanup
+        client.shutdown()
 
 
 if __name__ == "__main__":
