@@ -232,16 +232,25 @@ class TelemetryClient(OTelTelemetryClient):
                 certificate_chain = None
                 
                 if self.config.tls_ca_cert_path:
-                    with open(self.config.tls_ca_cert_path, 'rb') as f:
-                        root_certificates = f.read()
+                    try:
+                        with open(self.config.tls_ca_cert_path, 'rb') as f:
+                            root_certificates = f.read()
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        raise ValueError(f"Failed to read TLS CA certificate from {self.config.tls_ca_cert_path}: {e}")
                 
                 if self.config.tls_cert_path:
-                    with open(self.config.tls_cert_path, 'rb') as f:
-                        certificate_chain = f.read()
+                    try:
+                        with open(self.config.tls_cert_path, 'rb') as f:
+                            certificate_chain = f.read()
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        raise ValueError(f"Failed to read TLS certificate from {self.config.tls_cert_path}: {e}")
                 
                 if self.config.tls_key_path:
-                    with open(self.config.tls_key_path, 'rb') as f:
-                        private_key = f.read()
+                    try:
+                        with open(self.config.tls_key_path, 'rb') as f:
+                            private_key = f.read()
+                    except (FileNotFoundError, PermissionError, OSError) as e:
+                        raise ValueError(f"Failed to read TLS private key from {self.config.tls_key_path}: {e}")
                 
                 credentials = grpc.ssl_channel_credentials(
                     root_certificates=root_certificates,
