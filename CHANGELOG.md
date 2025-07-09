@@ -5,6 +5,21 @@ All notable changes to Arc Runtime will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-01-09
+
+### Added
+- Enhanced Kong Gateway integration with comprehensive TLS support
+- Retry logic with exponential backoff for improved reliability
+- Connectivity health checks for Kong endpoint validation
+- New TelemetryConfig dataclass for advanced configuration options
+- Support for Kong Konnect with authentication and routing
+
+### Improved
+- Restructured README using Diátaxis framework for better team onboarding
+- Enhanced error handling with Kong-specific error messages
+- Better telemetry client configuration with backward compatibility
+- Updated all code examples to use gpt-4.1 model
+
 ## [0.1.4] - 2025-01-08
 
 ### Fixed
